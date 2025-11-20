@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Deal Calc — Media Deals (vR2.2)</title>
+  <title>Deal Calc — Media Deals (vR2.3)</title>
   <style>
     :root {
       --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
@@ -35,7 +35,7 @@
 <header>
   <div class="wrap row">
     <h1>Deal Calc — Media Deals</h1>
-    <span class="pill">Build: vR2-2-optimized-20251120045900Z</span>
+    <span class="pill">Build: vR2-3-monthly-fix-20251120050500Z</span>
     <span class="pill">Dataset SHA-256: 41ac991fb01a102e…</span>
   </div>
 </header>
@@ -543,7 +543,7 @@ function renderProducts() {
 
 function updateProductSummary() {
   const pricingType = productState.pricingType;
-  let totalValue = 0;
+  let totalMonthlyValue = 0;
   let productCount = 0;
   
   productState.selectedProducts.forEach(productId => {
@@ -555,18 +555,20 @@ function updateProductSummary() {
     if (rateCardValue === null) return; // Skip TBD products
     
     const value = productState.customPrices.get(productId) ?? rateCardValue;
-    totalValue += value;
+    totalMonthlyValue += value;
     productCount++;
   });
   
   $('productCount').textContent = String(productCount);
-  $('totalValue').textContent = totalValue.toLocaleString();
+  $('totalValue').textContent = totalMonthlyValue.toLocaleString();
   
   // Update barter spots based on pricing type
+  // Convert monthly value to annual for barter calculations (spots generate annual value)
   if (pricingType === 'barter') {
-    calculateBarterMinutes(totalValue);
+    const annualBarterValue = totalMonthlyValue * 12;
+    calculateBarterMinutes(annualBarterValue, totalMonthlyValue);
   } else if (pricingType === 'mixed') {
-    renderCashValues();
+    renderCashValues(totalMonthlyValue);
   } else {
     // Cash mode - hide barter sections
     $('barterMinutesSection').classList.add('hidden');
@@ -574,7 +576,7 @@ function updateProductSummary() {
   }
 }
 
-function calculateBarterMinutes(totalBarterValue) {
+function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   const barterSection = $('barterMinutesSection');
   const breakdown = $('barterBreakdown');
   
@@ -781,7 +783,7 @@ function calculateBarterMinutes(totalBarterValue) {
           const val = Math.round(parseFloat(primeInput.value) || 0);
           const current = productState.manualMinutes.get(station.key) || {};
           productState.manualMinutes.set(station.key, { ...current, prime: val });
-          calculateBarterMinutes(totalBarterValue);
+          calculateBarterMinutes(totalBarterValue, monthlyBarterValue);
         };
         
         const primeUnit = document.createElement('span');
@@ -825,7 +827,7 @@ function calculateBarterMinutes(totalBarterValue) {
           const val = Math.round(parseFloat(rosInput.value) || 0);
           const current = productState.manualMinutes.get(station.key) || {};
           productState.manualMinutes.set(station.key, { ...current, ros: val });
-          calculateBarterMinutes(totalBarterValue);
+          calculateBarterMinutes(totalBarterValue, monthlyBarterValue);
         };
         
         const rosUnit = document.createElement('span');
@@ -865,7 +867,7 @@ function calculateBarterMinutes(totalBarterValue) {
   $('totalPrimeMinutes').textContent = `${totalPrimeSpots} spots/day`;
   $('totalROSMinutes').textContent = `${totalROSSpots} spots/day`;
   
-  // Show target vs actual with validation
+  // Show target vs actual with validation - using MONTHLY values for display
   const verifyRow = document.createElement('div');
   verifyRow.style.padding = '12px';
   verifyRow.style.fontSize = '12px';
@@ -882,14 +884,13 @@ function calculateBarterMinutes(totalBarterValue) {
   const statusColor = isWithinTolerance ? 'var(--muted)' : '#ff6b6b';
   
   // Monthly values
-  const targetMonthly = totalBarterValue / 12;
   const actualMonthly = totalActualValue / 12;
   
   const monthlyRow = document.createElement('div');
   monthlyRow.innerHTML = `
     <strong>Monthly Value:</strong>
     <div style="margin-left: 16px; color: var(--muted);">
-      Target: $${Math.round(targetMonthly).toLocaleString()}<br>
+      Target: $${Math.round(monthlyBarterValue).toLocaleString()}<br>
       Actual: $${Math.round(actualMonthly).toLocaleString()} ${status}
     </div>
   `;
@@ -913,7 +914,7 @@ function calculateBarterMinutes(totalBarterValue) {
   breakdown.appendChild(verifyRow);
 }
 
-function renderCashValues() {
+function renderCashValues(monthlyProductValue) {
   const cashSection = $('cashValuesSection');
   const cashList = $('cashValuesList');
   
@@ -968,7 +969,7 @@ function renderCashValues() {
       } else {
         productState.stationCashValues.delete(station.key);
       }
-      updateMixedPricing();
+      updateMixedPricing(monthlyProductValue);
     };
     
     inputGroup.appendChild(dollarSign);
@@ -984,14 +985,14 @@ function renderCashValues() {
   // Update totals
   $('totalCashInput').textContent = Math.round(totalCash).toLocaleString();
   
-  // Calculate remaining for barter
-  const totalProductValue = getTotalProductValue('mixed');
-  const remaining = Math.max(0, totalProductValue - totalCash);
-  $('remainingForBarter').textContent = Math.round(remaining).toLocaleString();
+  // Calculate remaining for barter (monthly value)
+  const remainingMonthly = Math.max(0, monthlyProductValue - totalCash);
+  $('remainingForBarter').textContent = Math.round(remainingMonthly).toLocaleString();
   
-  // Trigger barter calculation with remaining value
-  if (remaining > 0) {
-    calculateBarterMinutes(remaining);
+  // Trigger barter calculation with remaining value (convert to annual)
+  if (remainingMonthly > 0) {
+    const remainingAnnual = remainingMonthly * 12;
+    calculateBarterMinutes(remainingAnnual, remainingMonthly);
   } else {
     $('barterMinutesSection').classList.add('hidden');
   }
@@ -1012,8 +1013,8 @@ function getTotalProductValue(pricingType) {
   return total;
 }
 
-function updateMixedPricing() {
-  renderCashValues();
+function updateMixedPricing(monthlyProductValue) {
+  renderCashValues(monthlyProductValue);
 }
 
 function resetMinutesToAuto() {
@@ -1058,11 +1059,6 @@ function handlePricingTypeChange() {
   
   renderProducts();
   updateProductSummary();
-  
-  // For mixed mode, render cash values section
-  if (selectedType === 'mixed') {
-    renderCashValues();
-  }
 }
 
 function resetPricingToRateCard() {
