@@ -1,9 +1,10 @@
 <!doctype html>
+
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Deal Calc — Media Deals (vR2.3)</title>
+  <title>Deal Calc — Media Deals (vR2.4)</title>
   <style>
     :root {
       --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
@@ -35,7 +36,7 @@
 <header>
   <div class="wrap row">
     <h1>Deal Calc — Media Deals</h1>
-    <span class="pill">Build: vR2-3-monthly-fix-20251120050500Z</span>
+    <span class="pill">Build: vR2-4-annual-display-fix-20251120051200Z</span>
     <span class="pill">Dataset SHA-256: 41ac991fb01a102e…</span>
   </div>
 </header>
@@ -67,117 +68,121 @@
   </div>
 
   <!-- RADIO VIEW -->
+
   <div id="radioView" class="grid hidden" style="grid-template-columns: 1fr;">
     <div class="row" style="justify-content:flex-start; margin-bottom:6px;">
       <button class="btn" id="btnBack">← Back to Landing</button>
     </div>
 
-    <section class="card">
-      <div class="title">Parent</div>
-      <input id="parentSearch" type="text" placeholder="Search parent…"/>
-      <div id="parentResults" class="list"></div>
-    </section>
+```
+<section class="card">
+  <div class="title">Parent</div>
+  <input id="parentSearch" type="text" placeholder="Search parent…"/>
+  <div id="parentResults" class="list"></div>
+</section>
 
 
-    <section class="card">
-      <div class="title">Markets (multi-select with search)</div>
-      <div class="row">
-        <input id="marketSearch" type="text" placeholder="Filter markets…"/>
-        <button class="btn" id="btnSelAllMarkets">Select All (filtered)</button>
-        <button class="btn" id="btnClrAllMarkets">Clear (filtered)</button>
-      </div>
-      <div id="marketsPlaceholder" class="placeholder">Pick a parent first…</div>
-      <div id="marketsList" class="list"></div>
-    </section>
+<section class="card">
+  <div class="title">Markets (multi-select with search)</div>
+  <div class="row">
+    <input id="marketSearch" type="text" placeholder="Filter markets…"/>
+    <button class="btn" id="btnSelAllMarkets">Select All (filtered)</button>
+    <button class="btn" id="btnClrAllMarkets">Clear (filtered)</button>
+  </div>
+  <div id="marketsPlaceholder" class="placeholder">Pick a parent first…</div>
+  <div id="marketsList" class="list"></div>
+</section>
 
-    <section class="card">
-      <div class="title">Stations (multi-select with search)</div>
-      <div class="row">
-        <input id="stationSearch" type="text" placeholder="Filter stations…"/>
-        <button class="btn" id="btnSelAllStations">Select All (filtered)</button>
-        <button class="btn" id="btnClrAllStations">Clear (filtered)</button>
-      </div>
-      <div id="stationsPlaceholder" class="placeholder">Pick a parent first…</div>
-      <div id="stationsList" class="list"></div>
-    </section>
+<section class="card">
+  <div class="title">Stations (multi-select with search)</div>
+  <div class="row">
+    <input id="stationSearch" type="text" placeholder="Filter stations…"/>
+    <button class="btn" id="btnSelAllStations">Select All (filtered)</button>
+    <button class="btn" id="btnClrAllStations">Clear (filtered)</button>
+  </div>
+  <div id="stationsPlaceholder" class="placeholder">Pick a parent first…</div>
+  <div id="stationsList" class="list"></div>
+</section>
 
-    <section class="card">
-      <div class="title">Selected Stations (with AQH)</div>
-      <div id="selectedPreview" class="list"></div>
-      <div class="row">
-        <div class="pill">Count: <span id="selCount">0</span></div>
-        <div class="pill">Prime AQH Sum: <span id="primeSum">0</span></div>
-        <div class="pill">ROS AQH Sum: <span id="rosSum">0</span></div>
-      </div>
-    </section>
+<section class="card">
+  <div class="title">Selected Stations (with AQH)</div>
+  <div id="selectedPreview" class="list"></div>
+  <div class="row">
+    <div class="pill">Count: <span id="selCount">0</span></div>
+    <div class="pill">Prime AQH Sum: <span id="primeSum">0</span></div>
+    <div class="pill">ROS AQH Sum: <span id="rosSum">0</span></div>
+  </div>
+</section>
 
-    <section class="card">
-      <div class="title">Products & Pricing</div>
-      
-      <!-- Pricing Type Selection -->
-      <div class="row" style="margin-bottom: 12px;">
-        <label style="display:flex; align-items:center; gap:8px;">
-          <input type="radio" name="pricingType" value="cash" checked>
-          <span>Cash</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px;">
-          <input type="radio" name="pricingType" value="barter">
-          <span>Barter</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:8px;">
-          <input type="radio" name="pricingType" value="mixed">
-          <span>Mixed (Cash + Barter)</span>
-        </label>
-      </div>
+<section class="card">
+  <div class="title">Products & Pricing</div>
+  
+  <!-- Pricing Type Selection -->
+  <div class="row" style="margin-bottom: 12px;">
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="radio" name="pricingType" value="cash" checked>
+      <span>Cash</span>
+    </label>
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="radio" name="pricingType" value="barter">
+      <span>Barter</span>
+    </label>
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="radio" name="pricingType" value="mixed">
+      <span>Mixed (Cash + Barter)</span>
+    </label>
+  </div>
 
-      <!-- CPM Display (for Barter) -->
-      <div id="cpmDisplay" class="hidden" style="margin-bottom: 12px;">
-        <div class="row">
-          <span class="muted">CPM:</span>
-          <span class="badge">$2.00 (approval required to change)</span>
-        </div>
-      </div>
+  <!-- CPM Display (for Barter) -->
+  <div id="cpmDisplay" class="hidden" style="margin-bottom: 12px;">
+    <div class="row">
+      <span class="muted">CPM:</span>
+      <span class="badge">$2.00 (approval required to change)</span>
+    </div>
+  </div>
 
-      <!-- Products List -->
-      <div class="row" style="margin-bottom: 8px;">
-        <input id="productSearch" type="text" placeholder="Search products…"/>
-        <button class="btn" id="btnSelAllProducts">Select All</button>
-        <button class="btn" id="btnClrAllProducts">Clear All</button>
-        <button class="btn" id="btnResetPricing">Reset to Rate Card</button>
-      </div>
-      <div id="productsList" class="list"></div>
+  <!-- Products List -->
+  <div class="row" style="margin-bottom: 8px;">
+    <input id="productSearch" type="text" placeholder="Search products…"/>
+    <button class="btn" id="btnSelAllProducts">Select All</button>
+    <button class="btn" id="btnClrAllProducts">Clear All</button>
+    <button class="btn" id="btnResetPricing">Reset to Rate Card</button>
+  </div>
+  <div id="productsList" class="list"></div>
 
-      <!-- Summary -->
-      <div class="row" style="margin-top: 12px;">
-        <div class="pill">Products Selected: <span id="productCount">0</span></div>
-        <div class="pill">Total Value: $<span id="totalValue">0</span></div>
-      </div>
-    </section>
+  <!-- Summary -->
+  <div class="row" style="margin-top: 12px;">
+    <div class="pill">Products Selected: <span id="productCount">0</span></div>
+    <div class="pill">Total Value: $<span id="totalValue">0</span></div>
+  </div>
+</section>
 
-    <!-- Cash Values by Station (Mixed Mode Only) -->
-    <section class="card hidden" id="cashValuesSection">
-      <div class="title">Cash Values by Station</div>
-      <div class="muted" style="margin-bottom: 12px;">Enter cash payment for each station. Barter will automatically cover remaining value.</div>
-      <div id="cashValuesList" class="list"></div>
-      <div class="row" style="margin-top: 12px;">
-        <div class="pill">Total Cash: $<span id="totalCashInput">0</span></div>
-        <div class="pill">Remaining for Barter: $<span id="remainingForBarter">0</span></div>
-      </div>
-    </section>
+<!-- Cash Values by Station (Mixed Mode Only) -->
+<section class="card hidden" id="cashValuesSection">
+  <div class="title">Cash Values by Station</div>
+  <div class="muted" style="margin-bottom: 12px;">Enter cash payment for each station. Barter will automatically cover remaining value.</div>
+  <div id="cashValuesList" class="list"></div>
+  <div class="row" style="margin-top: 12px;">
+    <div class="pill">Total Cash: $<span id="totalCashInput">0</span></div>
+    <div class="pill">Remaining for Barter: $<span id="remainingForBarter">0</span></div>
+  </div>
+</section>
 
-    <!-- Barter Spots Breakdown -->
-    <section class="card hidden" id="barterMinutesSection">
-      <div class="title">Barter Spots Required (Optimized)</div>
-      <div class="row" style="margin-bottom: 12px;">
-        <div class="muted">Spots calculated using least minutes needed. Edit manually if needed.</div>
-        <button class="btn" id="btnResetMinutes">Reset to Auto</button>
-      </div>
-      <div id="barterBreakdown" class="list"></div>
-      <div class="row" style="margin-top: 12px;">
-        <div class="pill">Total Prime: <span id="totalPrimeMinutes">0</span></div>
-        <div class="pill">Total ROS: <span id="totalROSMinutes">0</span></div>
-      </div>
-    </section>
+<!-- Barter Spots Breakdown -->
+<section class="card hidden" id="barterMinutesSection">
+  <div class="title">Barter Spots Required (Optimized)</div>
+  <div class="row" style="margin-bottom: 12px;">
+    <div class="muted">Spots calculated using least minutes needed. Edit manually if needed.</div>
+    <button class="btn" id="btnResetMinutes">Reset to Auto</button>
+  </div>
+  <div id="barterBreakdown" class="list"></div>
+  <div class="row" style="margin-top: 12px;">
+    <div class="pill">Total Prime: <span id="totalPrimeMinutes">0</span></div>
+    <div class="pill">Total ROS: <span id="totalROSMinutes">0</span></div>
+  </div>
+</section>
+```
+
   </div>
 </main>
 
@@ -869,13 +874,7 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   
   // Show target vs actual with validation - using MONTHLY values for display
   const verifyRow = document.createElement('div');
-  verifyRow.style.padding = '12px';
-  verifyRow.style.fontSize = '12px';
-  verifyRow.style.borderTop = '1px solid var(--edge)';
-  verifyRow.style.marginTop = '8px';
-  verifyRow.style.display = 'flex';
-  verifyRow.style.flexDirection = 'column';
-  verifyRow.style.gap = '8px';
+  verifyRow.style.cssText = 'padding: 12px; font-size: 12px; border-top: 1px solid var(--edge); margin-top: 8px; display: flex; flex-direction: column; gap: 12px; background: rgba(15, 24, 35, 0.5);';
   
   const variance = ((totalActualValue - totalBarterValue) / totalBarterValue) * 100;
   const isWithinTolerance = Math.abs(variance) <= 5;
@@ -887,27 +886,43 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   const actualMonthly = totalActualValue / 12;
   
   const monthlyRow = document.createElement('div');
-  monthlyRow.innerHTML = `
-    <strong>Monthly Value:</strong>
-    <div style="margin-left: 16px; color: var(--muted);">
-      Target: $${Math.round(monthlyBarterValue).toLocaleString()}<br>
-      Actual: $${Math.round(actualMonthly).toLocaleString()} ${status}
-    </div>
-  `;
+  const monthlyTitle = document.createElement('strong');
+  monthlyTitle.textContent = 'Monthly Value:';
+  monthlyRow.appendChild(monthlyTitle);
+  
+  const monthlyDetails = document.createElement('div');
+  monthlyDetails.style.cssText = 'margin-left: 16px; color: var(--muted); margin-top: 4px;';
+  monthlyDetails.innerHTML = `Target: $${Math.round(monthlyBarterValue).toLocaleString()}<br>Actual: $${Math.round(actualMonthly).toLocaleString()} ${status}`;
+  monthlyRow.appendChild(monthlyDetails);
   
   // Annual values with variance warning
   const annualRow = document.createElement('div');
+  const annualTitle = document.createElement('strong');
+  annualTitle.textContent = 'Annual Value:';
+  annualRow.appendChild(annualTitle);
+  
+  const annualDetails = document.createElement('div');
+  annualDetails.style.cssText = 'margin-left: 16px; margin-top: 4px;';
+  
+  const targetLine = document.createElement('div');
+  targetLine.style.color = 'var(--muted)';
+  targetLine.textContent = `Target: $${Math.round(totalBarterValue).toLocaleString()}`;
+  annualDetails.appendChild(targetLine);
+  
+  const actualLine = document.createElement('div');
+  actualLine.style.color = 'var(--muted)';
+  actualLine.textContent = `Actual: $${Math.round(totalActualValue).toLocaleString()} ${status}`;
+  annualDetails.appendChild(actualLine);
+  
   const varianceText = variance > 0 ? `+${variance.toFixed(1)}%` : `${variance.toFixed(1)}%`;
   const warningText = isWithinTolerance ? '' : ' ⚠️ Outside ±5% tolerance';
   
-  annualRow.innerHTML = `
-    <strong>Annual Value:</strong>
-    <div style="margin-left: 16px; color: var(--muted);">
-      Target: $${Math.round(totalBarterValue).toLocaleString()}<br>
-      Actual: $${Math.round(totalActualValue).toLocaleString()} ${status}<br>
-      <span style="color: ${statusColor}; font-weight: 500;">Variance: ${varianceText}${warningText}</span>
-    </div>
-  `;
+  const varianceLine = document.createElement('div');
+  varianceLine.style.cssText = `color: ${statusColor}; font-weight: 500; margin-top: 2px;`;
+  varianceLine.textContent = `Variance: ${varianceText}${warningText}`;
+  annualDetails.appendChild(varianceLine);
+  
+  annualRow.appendChild(annualDetails);
   
   verifyRow.appendChild(monthlyRow);
   verifyRow.appendChild(annualRow);
@@ -1101,5 +1116,6 @@ function attachProductEventListeners() {
 }
 
 </script>
+
 </body>
 </html>
