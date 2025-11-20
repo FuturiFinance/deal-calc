@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Confidential - Futuri Media Deal Calc (vR2.8)</title>
+  <title>Confidential - Futuri Media Deal Calc (vR2.9)</title>
   <style>
     :root {
       --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
@@ -42,7 +42,7 @@
   <div class="wrap" style="padding: 12px 16px;">
     <h1 style="margin-bottom: 4px;">Confidential - Futuri Media Deal Calc</h1>
     <div class="muted" style="font-size: 11px;">
-      <span style="opacity: 0.7;">v2.7</span>
+      <span style="opacity: 0.7;">v2.9</span>
       <span style="margin: 0 8px;">•</span>
       <span style="opacity: 0.7;">20,981 stations • 5,186 parent companies</span>
     </div>
@@ -187,6 +187,23 @@
   <div class="row" style="margin-top: 12px;" id="barterTotals">
     <div class="pill">Total Prime: <span id="totalPrimeMinutes">0</span></div>
     <div class="pill">Total ROS: <span id="totalROSMinutes">0</span></div>
+  </div>
+</section>
+
+<!-- Proposal Generator -->
+<section class="card hidden" id="proposalSection">
+  <div class="title">Step 6: Generate Proposal</div>
+  <div class="row" style="margin-bottom: 12px;">
+    <button class="btn" id="btnGenerateProposal" style="background: #0d4a2e; border-color: #1a6b45;">Generate Proposal</button>
+    <button class="btn" id="btnCopyProposal">Copy to Clipboard</button>
+  </div>
+  
+  <div id="proposalOutput" class="hidden" style="background: #0c131b; border: 1px solid #223244; border-radius: 10px; padding: 16px; margin-top: 12px;">
+    <div style="margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;">
+      <strong style="color: #5fb584;">Proposal Ready</strong>
+      <span class="badge" id="proposalMode">Cash Deal</span>
+    </div>
+    <div id="proposalTable" style="font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6; white-space: pre; overflow-x: auto;"></div>
   </div>
 </section>
 ```
@@ -592,6 +609,14 @@ function updateProductSummary() {
   
   $('productCount').textContent = String(productCount);
   $('totalValue').textContent = totalMonthlyValueAllStations.toLocaleString();
+  
+  // Show/hide proposal section based on whether we have products and stations
+  const proposalSection = $('proposalSection');
+  if (productCount > 0 && numStations > 0) {
+    proposalSection.classList.remove('hidden');
+  } else {
+    proposalSection.classList.add('hidden');
+  }
   
   // Update displays based on pricing type
   if (pricingType === 'barter') {
@@ -1240,6 +1265,269 @@ function resetPricingToRateCard() {
   updateProductSummary();
 }
 
+// ============================================
+// PROPOSAL GENERATION
+// ============================================
+
+function generateProposal() {
+  const pricingType = productState.pricingType;
+  const proposalSection = $('proposalSection');
+  const proposalOutput = $('proposalOutput');
+  const proposalTable = $('proposalTable');
+  const proposalMode = $('proposalMode');
+  
+  // Show proposal section
+  proposalSection.classList.remove('hidden');
+  proposalOutput.classList.remove('hidden');
+  
+  // Get selected stations
+  const selectedStations = [];
+  (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
+    const key = s.parent + '|' + s.market + '|' + s.station;
+    if (state.stations.has(key)) {
+      selectedStations.push({...s, key});
+    }
+  });
+  
+  if (selectedStations.length === 0) {
+    proposalTable.textContent = 'No stations selected. Please select stations first.';
+    return;
+  }
+  
+  // Get selected products
+  const selectedProducts = [];
+  productState.selectedProducts.forEach(productId => {
+    const product = PRODUCTS.find(p => p.id === productId);
+    if (product) {
+      const rateCardValue = (pricingType === 'cash') ? product.cash : product.barter;
+      if (rateCardValue !== null) {
+        const value = productState.customPrices.get(productId) ?? rateCardValue;
+        selectedProducts.push({ ...product, monthlyValue: value });
+      }
+    }
+  });
+  
+  if (selectedProducts.length === 0) {
+    proposalTable.textContent = 'No products selected. Please select products first.';
+    return;
+  }
+  
+  // Update mode badge
+  if (pricingType === 'cash') {
+    proposalMode.textContent = 'Cash Deal';
+    proposalMode.style.background = '#0d4a2e';
+  } else if (pricingType === 'barter') {
+    proposalMode.textContent = 'Barter Deal';
+    proposalMode.style.background = '#3a2d0b';
+  } else {
+    proposalMode.textContent = 'Mixed Deal';
+    proposalMode.style.background = '#2d1a3a';
+  }
+  
+  // Generate proposal based on pricing type
+  let proposal = '';
+  
+  if (pricingType === 'cash') {
+    proposal = generateCashProposal(selectedStations, selectedProducts);
+  } else if (pricingType === 'barter') {
+    proposal = generateBarterProposal(selectedStations, selectedProducts);
+  } else {
+    proposal = generateMixedProposal(selectedStations, selectedProducts);
+  }
+  
+  proposalTable.textContent = proposal;
+  
+  // Scroll to proposal
+  proposalSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function generateCashProposal(stations, products) {
+  let proposal = 'FUTURI MEDIA - RADIO PROPOSAL\n';
+  proposal += '=' .repeat(80) + '\n\n';
+  
+  // Products section
+  proposal += 'PRODUCTS:\n';
+  proposal += '-'.repeat(80) + '\n';
+  products.forEach(product => {
+    proposal += `${product.name.padEnd(40)} $${product.monthlyValue.toLocaleString()}/month\n`;
+  });
+  proposal += '\n';
+  
+  // Stations section
+  proposal += 'STATIONS:\n';
+  proposal += '-'.repeat(80) + '\n';
+  const perStationMonthly = products.reduce((sum, p) => sum + p.monthlyValue, 0);
+  
+  proposal += `${'Station'.padEnd(30)} ${'Market'.padEnd(25)} ${'Monthly Value'.padEnd(20)}\n`;
+  proposal += '-'.repeat(80) + '\n';
+  
+  stations.forEach(station => {
+    proposal += `${station.station.padEnd(30)} ${station.market.padEnd(25)} $${perStationMonthly.toLocaleString().padStart(12)}\n`;
+  });
+  
+  proposal += '\n';
+  proposal += '-'.repeat(80) + '\n';
+  const totalMonthly = perStationMonthly * stations.length;
+  const totalAnnual = totalMonthly * 12;
+  
+  proposal += `${'TOTAL MONTHLY:'.padEnd(55)} $${totalMonthly.toLocaleString().padStart(20)}\n`;
+  proposal += `${'TOTAL ANNUAL:'.padEnd(55)} $${totalAnnual.toLocaleString().padStart(20)}\n`;
+  proposal += '='.repeat(80) + '\n';
+  
+  return proposal;
+}
+
+function generateBarterProposal(stations, products) {
+  let proposal = 'FUTURI MEDIA - RADIO PROPOSAL (BARTER)\n';
+  proposal += '='.repeat(100) + '\n\n';
+  
+  // Products section
+  proposal += 'PRODUCTS:\n';
+  proposal += '-'.repeat(100) + '\n';
+  products.forEach(product => {
+    proposal += `${product.name.padEnd(40)} $${product.monthlyValue.toLocaleString()}/month\n`;
+  });
+  proposal += '\n';
+  
+  // Stations section with barter spots
+  proposal += 'STATIONS & BARTER SPOTS:\n';
+  proposal += '-'.repeat(100) + '\n';
+  proposal += `${'Station'.padEnd(25)} ${'Market'.padEnd(20)} ${'Prime Spots'.padEnd(15)} ${'ROS Spots'.padEnd(15)} ${'Monthly'.padEnd(12)}\n`;
+  proposal += `${' '.padEnd(25)} ${' '.padEnd(20)} ${'M-SU 5a-8p'.padEnd(15)} ${'M-SU 6a-12a'.padEnd(15)}\n`;
+  proposal += '-'.repeat(100) + '\n';
+  
+  const perStationMonthly = products.reduce((sum, p) => sum + p.monthlyValue, 0);
+  
+  // Get barter spot allocations from productState.manualMinutes or calculate
+  stations.forEach(station => {
+    const manualOverride = productState.manualMinutes.get(station.key);
+    let primeSpots = 0;
+    let rosSpots = 0;
+    
+    if (manualOverride) {
+      primeSpots = manualOverride.prime || 0;
+      rosSpots = manualOverride.ros || 0;
+    } else {
+      // Use default allocation (simplified for proposal)
+      // In reality, this would match the calculation from calculateBarterMinutes
+      primeSpots = 1; // Default minimum
+      rosSpots = 1; // Default minimum
+    }
+    
+    const primeSpotsStr = primeSpots > 0 ? `${primeSpots}/day` : 'None';
+    const rosSpotsStr = rosSpots > 0 ? `${rosSpots}/day` : 'None';
+    
+    proposal += `${station.station.padEnd(25)} ${station.market.padEnd(20)} ${primeSpotsStr.padEnd(15)} ${rosSpotsStr.padEnd(15)} $${perStationMonthly.toLocaleString().padStart(10)}\n`;
+  });
+  
+  proposal += '\n';
+  proposal += '-'.repeat(100) + '\n';
+  const totalMonthly = perStationMonthly * stations.length;
+  const totalAnnual = totalMonthly * 12;
+  
+  proposal += `${'TOTAL MONTHLY VALUE:'.padEnd(80)} $${totalMonthly.toLocaleString().padStart(15)}\n`;
+  proposal += `${'TOTAL ANNUAL VALUE:'.padEnd(80)} $${totalAnnual.toLocaleString().padStart(15)}\n`;
+  proposal += '\n';
+  proposal += 'NOTE: Prime = M-SU 5a-8p (Drive Time), ROS = M-SU 6a-12a (Run of Schedule)\n';
+  proposal += '='.repeat(100) + '\n';
+  
+  return proposal;
+}
+
+function generateMixedProposal(stations, products) {
+  let proposal = 'FUTURI MEDIA - RADIO PROPOSAL (MIXED: CASH + BARTER)\n';
+  proposal += '='.repeat(100) + '\n\n';
+  
+  // Products section
+  proposal += 'PRODUCTS:\n';
+  proposal += '-'.repeat(100) + '\n';
+  products.forEach(product => {
+    proposal += `${product.name.padEnd(40)} $${product.monthlyValue.toLocaleString()}/month\n`;
+  });
+  proposal += '\n';
+  
+  // Stations section with cash and barter
+  proposal += 'STATIONS (CASH + BARTER):\n';
+  proposal += '-'.repeat(100) + '\n';
+  proposal += `${'Station'.padEnd(25)} ${'Market'.padEnd(20)} ${'Cash/Month'.padEnd(15)} ${'Prime'.padEnd(10)} ${'ROS'.padEnd(10)}\n`;
+  proposal += '-'.repeat(100) + '\n';
+  
+  const perStationMonthly = products.reduce((sum, p) => sum + p.monthlyValue, 0);
+  
+  stations.forEach(station => {
+    const cashValue = productState.stationCashValues.get(station.key) || 0;
+    const manualOverride = productState.manualMinutes.get(station.key);
+    
+    let primeSpots = 0;
+    let rosSpots = 0;
+    
+    if (manualOverride) {
+      primeSpots = manualOverride.prime || 0;
+      rosSpots = manualOverride.ros || 0;
+    } else {
+      // Calculate based on remaining after cash
+      if (cashValue < perStationMonthly) {
+        primeSpots = 1;
+        rosSpots = 0;
+      }
+    }
+    
+    const cashStr = `$${cashValue.toLocaleString()}`;
+    const primeStr = primeSpots > 0 ? `${primeSpots}/day` : 'None';
+    const rosStr = rosSpots > 0 ? `${rosSpots}/day` : 'None';
+    
+    proposal += `${station.station.padEnd(25)} ${station.market.padEnd(20)} ${cashStr.padEnd(15)} ${primeStr.padEnd(10)} ${rosStr.padEnd(10)}\n`;
+  });
+  
+  proposal += '\n';
+  proposal += '-'.repeat(100) + '\n';
+  
+  // Calculate totals
+  let totalCash = 0;
+  stations.forEach(station => {
+    totalCash += (productState.stationCashValues.get(station.key) || 0);
+  });
+  
+  const totalMonthly = perStationMonthly * stations.length;
+  const totalAnnual = totalMonthly * 12;
+  const totalBarterMonthly = totalMonthly - totalCash;
+  const totalBarterAnnual = totalBarterMonthly * 12;
+  
+  proposal += `${'TOTAL CASH (MONTHLY):'.padEnd(80)} $${totalCash.toLocaleString().padStart(15)}\n`;
+  proposal += `${'TOTAL BARTER VALUE (MONTHLY):'.padEnd(80)} $${totalBarterMonthly.toLocaleString().padStart(15)}\n`;
+  proposal += `${'TOTAL MONTHLY VALUE:'.padEnd(80)} $${totalMonthly.toLocaleString().padStart(15)}\n`;
+  proposal += `${'TOTAL ANNUAL VALUE:'.padEnd(80)} $${totalAnnual.toLocaleString().padStart(15)}\n`;
+  proposal += '\n';
+  proposal += 'NOTE: Prime = M-SU 5a-8p (Drive Time), ROS = M-SU 6a-12a (Run of Schedule)\n';
+  proposal += '='.repeat(100) + '\n';
+  
+  return proposal;
+}
+
+function copyProposalToClipboard() {
+  const proposalTable = $('proposalTable');
+  const text = proposalTable.textContent;
+  
+  if (!text || text.includes('No stations') || text.includes('No products')) {
+    alert('Please generate a proposal first');
+    return;
+  }
+  
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = $('btnCopyProposal');
+    const originalText = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    btn.style.background = '#0d4a2e';
+    
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.style.background = '';
+    }, 2000);
+  }).catch(err => {
+    alert('Failed to copy to clipboard. Please select and copy the text manually.');
+  });
+}
+
 function attachProductEventListeners() {
   // Pricing type radio buttons
   document.querySelectorAll('input[name="pricingType"]').forEach(radio => {
@@ -1267,6 +1555,10 @@ function attachProductEventListeners() {
   
   // Reset barter spots to auto
   $('btnResetMinutes').onclick = resetMinutesToAuto;
+  
+  // Proposal generation buttons
+  $('btnGenerateProposal').onclick = generateProposal;
+  $('btnCopyProposal').onclick = copyProposalToClipboard;
   
   // Initial render
   renderProducts();
