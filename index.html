@@ -89,7 +89,6 @@
   <div id="parentResults" class="list"></div>
 </section>
 
-
 <section class="card">
   <div class="title">Step 2: Select Markets (Optional)</div>
   <div class="row">
@@ -203,7 +202,7 @@
       <strong style="color: #5fb584;">Proposal Ready</strong>
       <span class="badge" id="proposalMode">Cash Deal</span>
     </div>
-    <div id="proposalTable" style="font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.6; white-space: pre; overflow-x: auto;"></div>
+    <div id="proposalTable" style="overflow-x: auto;"></div>
   </div>
 </section>
 ```
@@ -255,10 +254,10 @@ const PRODUCTS = [
 const productState = {
   selectedProducts: new Set(),
   pricingType: 'cash',
-  customPrices: new Map(), // productId -> custom price
+  customPrices: new Map(),
   cpm: 2.00,
-  manualMinutes: new Map(), // stationKey -> {prime: number, ros: number} - now stores SPOTS not minutes
-  stationCashValues: new Map() // stationKey -> cash value (for mixed pricing)
+  manualMinutes: new Map(),
+  stationCashValues: new Map()
 };
 
 // Load dataset from GitHub
@@ -308,7 +307,6 @@ function setStationsEnabled(enabled) {
 
 // Initialize app after data loads
 async function initApp() {
-  // Show loading indicator
   const main = document.querySelector('main');
   const loading = document.createElement('div');
   loading.id = 'loadingIndicator';
@@ -316,14 +314,11 @@ async function initApp() {
   loading.innerHTML = '⏳ Loading radio station data...<br><span style="font-size:14px; color:var(--muted);">Fetching from GitHub</span>';
   main.insertBefore(loading, main.firstChild);
   
-  // Load data
   DS = await loadDataset();
   rebuildIndex();
   
-  // Remove loading indicator
   loading.remove();
   
-  // Setup event listeners
   setupEventListeners();
 }
 
@@ -331,23 +326,18 @@ function setupEventListeners() {
   const landing = $('landing'); 
   const radio = $('radioView');
 
-  
-  // Landing <-> Radio navigation
   $('btnOpenRadio').onclick = () => { landing.classList.add('hidden'); radio.classList.remove('hidden'); window.scrollTo(0,0); };
   $('btnBack').onclick = () => { radio.classList.add('hidden'); landing.classList.remove('hidden'); window.scrollTo(0,0); };
 
-  // Initial disabled state
   setMarketsEnabled(false);
   setStationsEnabled(false);
 
-  // Search & lists
   const ps = $('parentSearch'); 
   ps.addEventListener('input', () => renderParents(ps.value)); 
   renderParents('');
   $('marketSearch').addEventListener('input', renderMarkets);
   $('stationSearch').addEventListener('input', renderStations);
 
-  // Buttons
   $('btnSelAllMarkets').onclick = () => { 
     (IDX.stationsByParent.get(state.parent) || []).forEach(s => state.markets.add(s.market)); 
     renderMarkets(); renderStations(); updatePreview(); 
@@ -368,11 +358,9 @@ function setupEventListeners() {
     updatePreview(); 
   };
 
-  // Products panel
   attachProductEventListeners();
 }
 
-// Start the app
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
@@ -466,7 +454,6 @@ function updatePreview() {
   $('primeSum').textContent = String(Math.round(prime));
   $('rosSum').textContent = String(Math.round(ros));
   
-  // Update product calculations when stations change
   updateProductCalculations();
 }
 
@@ -489,7 +476,6 @@ function renderProducts() {
       row.style.alignItems = 'stretch';
       row.style.gap = '8px';
       
-      // Top row: checkbox and name
       const topRow = document.createElement('label');
       topRow.style.display = 'flex';
       topRow.style.alignItems = 'center';
@@ -521,7 +507,6 @@ function renderProducts() {
       leftSide.appendChild(cb);
       leftSide.appendChild(name);
       
-      // Price display and override
       const priceContainer = document.createElement('div');
       priceContainer.style.display = 'flex';
       priceContainer.style.alignItems = 'center';
@@ -545,7 +530,6 @@ function renderProducts() {
       topRow.appendChild(leftSide);
       topRow.appendChild(priceContainer);
       
-      // Bottom row: price override (only if product is selected and has a price)
       if (productState.selectedProducts.has(product.id) && rateCardValue !== null) {
         const overrideRow = document.createElement('div');
         overrideRow.style.display = 'flex';
@@ -594,23 +578,20 @@ function updateProductSummary() {
     const product = PRODUCTS.find(p => p.id === productId);
     if (!product) return;
     
-    // For mixed mode, use barter values (higher) for total product value
     const rateCardValue = (pricingType === 'cash') ? product.cash : product.barter;
-    if (rateCardValue === null) return; // Skip TBD products
+    if (rateCardValue === null) return;
     
     const value = productState.customPrices.get(productId) ?? rateCardValue;
     totalMonthlyValue += value;
     productCount++;
   });
   
-  // CRITICAL: Multiply by number of selected stations (selling to each station)
   const numStations = state.stations.size;
   const totalMonthlyValueAllStations = totalMonthlyValue * numStations;
   
   $('productCount').textContent = String(productCount);
   $('totalValue').textContent = totalMonthlyValueAllStations.toLocaleString();
   
-  // Show/hide proposal section based on whether we have products and stations
   const proposalSection = $('proposalSection');
   if (productCount > 0 && numStations > 0) {
     proposalSection.classList.remove('hidden');
@@ -618,16 +599,13 @@ function updateProductSummary() {
     proposalSection.classList.add('hidden');
   }
   
-  // Update displays based on pricing type
   if (pricingType === 'barter') {
     const annualBarterValue = totalMonthlyValueAllStations * 12;
     calculateBarterMinutes(annualBarterValue, totalMonthlyValueAllStations);
     $('cashValuesSection').classList.add('hidden');
   } else if (pricingType === 'mixed') {
     renderCashValues(totalMonthlyValueAllStations);
-    // Mixed mode barter calculation happens in renderCashValues
   } else {
-    // Cash mode - show cash summary
     showCashSummary(totalMonthlyValueAllStations);
     $('cashValuesSection').classList.add('hidden');
   }
@@ -648,14 +626,11 @@ function showCashSummary(totalMonthlyValue) {
   barterSection.classList.remove('hidden');
   breakdown.innerHTML = '';
   
-  // Update title for cash mode
   if (sectionTitle) sectionTitle.textContent = 'CASH DEAL SUMMARY';
   
-  // Hide barter-specific controls
   if (barterControls) barterControls.classList.add('hidden');
   if (barterTotals) barterTotals.classList.add('hidden');
   
-  // Get selected stations
   const selectedStations = [];
   (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
     const key = s.parent + '|' + s.market + '|' + s.station;
@@ -666,7 +641,6 @@ function showCashSummary(totalMonthlyValue) {
   
   const perStationMonthly = totalMonthlyValue / selectedStations.length;
   
-  // List stations with per-station value
   selectedStations.forEach(station => {
     const row = document.createElement('div');
     row.className = 'el';
@@ -685,13 +659,11 @@ function showCashSummary(totalMonthlyValue) {
     breakdown.appendChild(row);
   });
   
-  // Show Monthly/Annual summary
   const annualValue = totalMonthlyValue * 12;
   
   const summaryRow = document.createElement('div');
   summaryRow.style.cssText = 'padding: 12px; font-size: 12px; border-top: 1px solid var(--edge); margin-top: 8px; display: flex; flex-direction: column; gap: 12px; background: rgba(15, 24, 35, 0.5);';
   
-  // Per-station breakdown
   const perStationRow = document.createElement('div');
   const perStationTitle = document.createElement('strong');
   perStationTitle.textContent = 'Per Station:';
@@ -702,7 +674,6 @@ function showCashSummary(totalMonthlyValue) {
   perStationDetails.textContent = `$${Math.round(perStationMonthly).toLocaleString()}/mo × ${selectedStations.length} station${selectedStations.length !== 1 ? 's' : ''}`;
   perStationRow.appendChild(perStationDetails);
   
-  // Monthly total
   const monthlyRow = document.createElement('div');
   const monthlyTitle = document.createElement('strong');
   monthlyTitle.textContent = 'Total Monthly Value:';
@@ -713,7 +684,6 @@ function showCashSummary(totalMonthlyValue) {
   monthlyDetails.textContent = `$${Math.round(totalMonthlyValue).toLocaleString()}`;
   monthlyRow.appendChild(monthlyDetails);
   
-  // Annual total
   const annualRow = document.createElement('div');
   const annualTitle = document.createElement('strong');
   annualTitle.textContent = 'Total Annual Value:';
@@ -745,14 +715,11 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   barterSection.classList.remove('hidden');
   breakdown.innerHTML = '';
   
-  // Update title for barter mode
   if (sectionTitle) sectionTitle.textContent = 'Barter Spots Required (Distributed)';
   
-  // Show barter-specific controls
   if (barterControls) barterControls.classList.remove('hidden');
   if (barterTotals) barterTotals.classList.remove('hidden');
   
-  // Get selected stations with their AQH
   const selectedStations = [];
   (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
     const key = s.parent + '|' + s.market + '|' + s.station;
@@ -770,15 +737,13 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   const weeksPerYear = 52;
   const daysPerWeek = 7;
   const daypartsPerDay = 2;
-  const factor = cpm * daysPerWeek * daypartsPerDay * weeksPerYear; // CPM * 728
+  const factor = cpm * daysPerWeek * daypartsPerDay * weeksPerYear;
   
-  // Check if any station has manual overrides
   const hasAnyManualOverrides = selectedStations.some(s => productState.manualMinutes.has(s.key));
   
   let stationSpots = [];
   
   if (hasAnyManualOverrides) {
-    // Use manual values
     selectedStations.forEach(station => {
       const primeAQH = station.primeAQH || 0;
       const rosAQH = station.rosAQH || 0;
@@ -794,8 +759,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
       });
     });
   } else {
-    // AUTO-CALCULATE: Distribute proportionally across ALL stations
-    // Calculate total efficiency across all stations
     let totalPrimeEfficiency = 0;
     let totalROSEfficiency = 0;
     
@@ -816,7 +779,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
     
     const totalEfficiency = totalPrimeEfficiency + totalROSEfficiency;
     
-    // Allocate proportionally based on efficiency share
     selectedStations.forEach(station => {
       const primeAQH = station.primeAQH || 0;
       const rosAQH = station.rosAQH || 0;
@@ -824,22 +786,17 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
       let primeSpots = 0;
       let rosSpots = 0;
       
-      // Calculate this station's share of the target value
       if (primeAQH > 0 && totalPrimeEfficiency > 0) {
         const primeSpotValue = (primeAQH / 1000) * factor;
         const primeShare = (primeSpotValue / totalEfficiency) * totalBarterValue;
-        // Calculate spots needed for this share
         primeSpots = Math.round(primeShare / primeSpotValue);
-        // Ensure at least 1 spot if station has non-zero AQH
         if (primeSpots === 0 && primeAQH > 0) primeSpots = 1;
       }
       
       if (rosAQH > 0 && totalROSEfficiency > 0) {
         const rosSpotValue = (rosAQH / 1000) * factor;
         const rosShare = (rosSpotValue / totalEfficiency) * totalBarterValue;
-        // Calculate spots needed for this share
         rosSpots = Math.round(rosShare / rosSpotValue);
-        // Ensure at least 1 spot if station has non-zero AQH
         if (rosSpots === 0 && rosAQH > 0) rosSpots = 1;
       }
       
@@ -853,7 +810,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
       });
     });
     
-    // Fine-tune: If we're outside ±5%, adjust the most efficient stations
     let currentValue = 0;
     stationSpots.forEach(entry => {
       if (entry.primeAQH > 0 && entry.primeSpots > 0) {
@@ -867,9 +823,7 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
     const targetMin = totalBarterValue * 0.95;
     const targetMax = totalBarterValue * 1.05;
     
-    // If outside tolerance, adjust most efficient station
     if (currentValue < targetMin || currentValue > targetMax) {
-      // Find most efficient station
       let mostEfficient = null;
       let maxEfficiency = 0;
       
@@ -884,7 +838,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         }
       });
       
-      // Adjust spots on most efficient station to hit target
       if (mostEfficient) {
         const difference = totalBarterValue - currentValue;
         const spotsToAdjust = Math.round(difference / mostEfficient.spotValue);
@@ -898,7 +851,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
     }
   }
   
-  // Calculate totals
   let totalPrimeSpots = 0;
   let totalROSSpots = 0;
   let totalActualValue = 0;
@@ -918,7 +870,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
     }
   });
   
-  // Render station breakdown - SHOW ALL STATIONS
   stationSpots.forEach(entry => {
       const station = entry.station;
       const row = document.createElement('div');
@@ -930,7 +881,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
       const stationName = document.createElement('div');
       stationName.innerHTML = `<strong>${station.station}</strong> <span class="muted">— ${station.market}</span>`;
       
-      // Show message if no AQH data
       if ((entry.primeAQH === 0 && entry.rosAQH === 0) || (entry.primeSpots === 0 && entry.rosSpots === 0)) {
         const noDataMsg = document.createElement('div');
         noDataMsg.style.cssText = 'margin-left: 8px; color: var(--muted); font-size: 11px; font-style: italic;';
@@ -942,14 +892,12 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         return;
       }
       
-      // Editable spots inputs (whole numbers only)
       const editRow = document.createElement('div');
       editRow.style.display = 'flex';
       editRow.style.gap = '12px';
       editRow.style.marginLeft = '8px';
       editRow.style.alignItems = 'center';
       
-      // Prime spots input
       if (entry.primeAQH > 0) {
         const primeGroup = document.createElement('div');
         primeGroup.style.display = 'flex';
@@ -963,7 +911,7 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         const primeInput = document.createElement('input');
         primeInput.type = 'number';
         primeInput.min = '0';
-        primeInput.step = '1'; // Whole numbers only
+        primeInput.step = '1';
         primeInput.value = entry.primeSpots;
         primeInput.style.width = '60px';
         primeInput.style.height = '28px';
@@ -979,7 +927,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         primeUnit.style.fontSize = '11px';
         primeUnit.textContent = 'spots/day';
         
-        // Show value per spot
         const primeValuePerSpot = (entry.primeAQH / 1000) * factor;
         const primeValueBadge = document.createElement('span');
         primeValueBadge.className = 'badge';
@@ -993,7 +940,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         editRow.appendChild(primeGroup);
       }
       
-      // ROS spots input
       if (entry.rosAQH > 0) {
         const rosGroup = document.createElement('div');
         rosGroup.style.display = 'flex';
@@ -1007,7 +953,7 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         const rosInput = document.createElement('input');
         rosInput.type = 'number';
         rosInput.min = '0';
-        rosInput.step = '1'; // Whole numbers only
+        rosInput.step = '1';
         rosInput.value = entry.rosSpots;
         rosInput.style.width = '60px';
         rosInput.style.height = '28px';
@@ -1023,7 +969,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         rosUnit.style.fontSize = '11px';
         rosUnit.textContent = 'spots/day';
         
-        // Show value per spot
         const rosValuePerSpot = (entry.rosAQH / 1000) * factor;
         const rosValueBadge = document.createElement('span');
         rosValueBadge.className = 'badge';
@@ -1037,7 +982,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
         editRow.appendChild(rosGroup);
       }
       
-      // Show if manual override is active
       if (entry.manual) {
         const manualBadge = document.createElement('span');
         manualBadge.className = 'badge';
@@ -1051,11 +995,9 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
       breakdown.appendChild(row);
     });
   
-  // Display totals
   $('totalPrimeMinutes').textContent = `${totalPrimeSpots} spots/day`;
   $('totalROSMinutes').textContent = `${totalROSSpots} spots/day`;
   
-  // Show target vs actual with validation - using MONTHLY values for display
   const verifyRow = document.createElement('div');
   verifyRow.style.cssText = 'padding: 12px; font-size: 12px; border-top: 1px solid var(--edge); margin-top: 8px; display: flex; flex-direction: column; gap: 12px; background: rgba(15, 24, 35, 0.5);';
   
@@ -1065,7 +1007,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   const status = hasAnyManualOverrides ? '✏️ Manual' : '✓ Distributed';
   const statusColor = isWithinTolerance ? 'var(--muted)' : '#ff6b6b';
   
-  // Monthly values
   const actualMonthly = totalActualValue / 12;
   
   const monthlyRow = document.createElement('div');
@@ -1078,7 +1019,6 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   monthlyDetails.innerHTML = `Target: $${Math.round(monthlyBarterValue).toLocaleString()}<br>Actual: $${Math.round(actualMonthly).toLocaleString()} ${status}`;
   monthlyRow.appendChild(monthlyDetails);
   
-  // Annual values with variance warning
   const annualRow = document.createElement('div');
   const annualTitle = document.createElement('strong');
   annualTitle.textContent = 'Annual Value:';
@@ -1124,7 +1064,6 @@ function renderCashValues(monthlyProductValue) {
   cashSection.classList.remove('hidden');
   cashList.innerHTML = '';
   
-  // Get selected stations
   const selectedStations = [];
   (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
     const key = s.parent + '|' + s.market + '|' + s.station;
@@ -1180,14 +1119,11 @@ function renderCashValues(monthlyProductValue) {
     totalCash += (productState.stationCashValues.get(station.key) || 0);
   });
   
-  // Update totals
   $('totalCashInput').textContent = Math.round(totalCash).toLocaleString();
   
-  // Calculate remaining for barter (monthly value)
   const remainingMonthly = Math.max(0, monthlyProductValue - totalCash);
   $('remainingForBarter').textContent = Math.round(remainingMonthly).toLocaleString();
   
-  // Trigger barter calculation with remaining value (convert to annual)
   if (remainingMonthly > 0) {
     const remainingAnnual = remainingMonthly * 12;
     calculateBarterMinutes(remainingAnnual, remainingMonthly);
@@ -1230,13 +1166,9 @@ function handlePricingTypeChange() {
   const selectedType = document.querySelector('input[name="pricingType"]:checked').value;
   productState.pricingType = selectedType;
   
-  // Clear custom prices when switching types
   productState.customPrices.clear();
-  
-  // Reset manual spots when switching modes
   productState.manualMinutes.clear();
   
-  // Show/hide sections based on pricing type
   const cpmDisplay = $('cpmDisplay');
   const cashValuesSection = $('cashValuesSection');
   const barterSection = $('barterMinutesSection');
@@ -1248,11 +1180,9 @@ function handlePricingTypeChange() {
   } else if (selectedType === 'barter') {
     cpmDisplay.classList.remove('hidden');
     cashValuesSection.classList.add('hidden');
-    // Barter section will be shown by calculateBarterMinutes if products selected
   } else if (selectedType === 'mixed') {
     cpmDisplay.classList.remove('hidden');
     cashValuesSection.classList.remove('hidden');
-    // Both cash and barter sections will be shown
   }
   
   renderProducts();
@@ -1266,7 +1196,7 @@ function resetPricingToRateCard() {
 }
 
 // ============================================
-// PROPOSAL GENERATION
+// PROPOSAL GENERATION - UPDATED WITH HTML TABLES
 // ============================================
 
 function generateProposal() {
@@ -1276,11 +1206,9 @@ function generateProposal() {
   const proposalTable = $('proposalTable');
   const proposalMode = $('proposalMode');
   
-  // Show proposal section
   proposalSection.classList.remove('hidden');
   proposalOutput.classList.remove('hidden');
   
-  // Get selected stations
   const selectedStations = [];
   (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
     const key = s.parent + '|' + s.market + '|' + s.station;
@@ -1290,11 +1218,10 @@ function generateProposal() {
   });
   
   if (selectedStations.length === 0) {
-    proposalTable.textContent = 'No stations selected. Please select stations first.';
+    proposalTable.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">No stations selected. Please select stations first.</div>';
     return;
   }
   
-  // Get selected products
   const selectedProducts = [];
   productState.selectedProducts.forEach(productId => {
     const product = PRODUCTS.find(p => p.id === productId);
@@ -1308,11 +1235,10 @@ function generateProposal() {
   });
   
   if (selectedProducts.length === 0) {
-    proposalTable.textContent = 'No products selected. Please select products first.';
+    proposalTable.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">No products selected. Please select products first.</div>';
     return;
   }
   
-  // Update mode badge
   if (pricingType === 'cash') {
     proposalMode.textContent = 'Cash Deal';
     proposalMode.style.background = '#0d4a2e';
@@ -1324,83 +1250,138 @@ function generateProposal() {
     proposalMode.style.background = '#2d1a3a';
   }
   
-  // Generate proposal based on pricing type
-  let proposal = '';
+  let proposalHTML = '';
   
   if (pricingType === 'cash') {
-    proposal = generateCashProposal(selectedStations, selectedProducts);
+    proposalHTML = generateCashProposalTable(selectedStations, selectedProducts);
   } else if (pricingType === 'barter') {
-    proposal = generateBarterProposal(selectedStations, selectedProducts);
+    proposalHTML = generateBarterProposalTable(selectedStations, selectedProducts);
   } else {
-    proposal = generateMixedProposal(selectedStations, selectedProducts);
+    proposalHTML = generateMixedProposalTable(selectedStations, selectedProducts);
   }
   
-  proposalTable.textContent = proposal;
+  proposalTable.innerHTML = proposalHTML;
   
-  // Scroll to proposal
   proposalSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function generateCashProposal(stations, products) {
-  let proposal = 'FUTURI MEDIA - RADIO PROPOSAL\n';
-  proposal += '=' .repeat(80) + '\n\n';
-  
-  // Products section
-  proposal += 'PRODUCTS:\n';
-  proposal += '-'.repeat(80) + '\n';
-  products.forEach(product => {
-    proposal += `${product.name.padEnd(40)} $${product.monthlyValue.toLocaleString()}/month\n`;
-  });
-  proposal += '\n';
-  
-  // Stations section
-  proposal += 'STATIONS:\n';
-  proposal += '-'.repeat(80) + '\n';
+function generateCashProposalTable(stations, products) {
   const perStationMonthly = products.reduce((sum, p) => sum + p.monthlyValue, 0);
-  
-  proposal += `${'Station'.padEnd(30)} ${'Market'.padEnd(25)} ${'Monthly Value'.padEnd(20)}\n`;
-  proposal += '-'.repeat(80) + '\n';
-  
-  stations.forEach(station => {
-    proposal += `${station.station.padEnd(30)} ${station.market.padEnd(25)} $${perStationMonthly.toLocaleString().padStart(12)}\n`;
-  });
-  
-  proposal += '\n';
-  proposal += '-'.repeat(80) + '\n';
   const totalMonthly = perStationMonthly * stations.length;
   const totalAnnual = totalMonthly * 12;
   
-  proposal += `${'TOTAL MONTHLY:'.padEnd(55)} $${totalMonthly.toLocaleString().padStart(20)}\n`;
-  proposal += `${'TOTAL ANNUAL:'.padEnd(55)} $${totalAnnual.toLocaleString().padStart(20)}\n`;
-  proposal += '='.repeat(80) + '\n';
+  let html = `
+    <div style="font-family: Arial, sans-serif; color: white; background: #0f1823; padding: 20px; border-radius: 8px;">
+      <h2 style="text-align: center; margin: 0 0 24px 0; color: #5fb584; font-size: 20px;">FUTURI MEDIA - RADIO PROPOSAL</h2>
+      
+      <div style="margin-bottom: 30px;">
+        <h3 style="color: #5fb584; font-size: 14px; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">Products:</h3>
+        <table style="width: 100%; border-collapse: collapse; background: white; color: black; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tbody>`;
   
-  return proposal;
+  products.forEach((product, idx) => {
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8f9fa';
+    html += `
+            <tr style="background: ${bgColor};">
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0;">${product.name}</td>
+              <td style="padding: 12px 16px; text-align: right; font-weight: 600; border-bottom: 1px solid #e0e0e0;">$${product.monthlyValue.toLocaleString()}/month</td>
+            </tr>`;
+  });
+  
+  html += `
+          </tbody>
+        </table>
+      </div>
+      
+      <div>
+        <h3 style="color: #5fb584; font-size: 14px; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">Stations:</h3>
+        <table style="width: 100%; border-collapse: collapse; background: white; color: black; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <thead>
+            <tr style="background: #4a6178; color: white;">
+              <th style="padding: 12px 16px; text-align: left; font-weight: 600;">Station</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 600;">Market</th>
+              <th style="padding: 12px 16px; text-align: right; font-weight: 600;">Monthly Value</th>
+            </tr>
+          </thead>
+          <tbody>`;
+  
+  stations.forEach((station, idx) => {
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8f9fa';
+    html += `
+            <tr style="background: ${bgColor};">
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0; font-weight: 500;">${station.station}</td>
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0;">${station.market}</td>
+              <td style="padding: 12px 16px; text-align: right; font-weight: 600; border-bottom: 1px solid #e0e0e0;">$${perStationMonthly.toLocaleString()}</td>
+            </tr>`;
+  });
+  
+  html += `
+          </tbody>
+          <tfoot>
+            <tr style="background: #e8f4f0; font-weight: 700;">
+              <td colspan="2" style="padding: 16px; text-align: right; border-top: 2px solid #4a6178;">TOTAL MONTHLY:</td>
+              <td style="padding: 16px; text-align: right; font-size: 16px; color: #0d4a2e; border-top: 2px solid #4a6178;">$${totalMonthly.toLocaleString()}</td>
+            </tr>
+            <tr style="background: #d4ede5; font-weight: 700;">
+              <td colspan="2" style="padding: 16px; text-align: right;">TOTAL ANNUAL:</td>
+              <td style="padding: 16px; text-align: right; font-size: 16px; color: #0d4a2e;">$${totalAnnual.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
+  
+  return html;
 }
 
-function generateBarterProposal(stations, products) {
-  let proposal = 'FUTURI MEDIA - RADIO PROPOSAL (BARTER)\n';
-  proposal += '='.repeat(100) + '\n\n';
-  
-  // Products section
-  proposal += 'PRODUCTS:\n';
-  proposal += '-'.repeat(100) + '\n';
-  products.forEach(product => {
-    proposal += `${product.name.padEnd(40)} $${product.monthlyValue.toLocaleString()}/month\n`;
-  });
-  proposal += '\n';
-  
-  // Stations section with barter spots
-  proposal += 'STATIONS & BARTER SPOTS:\n';
-  proposal += '-'.repeat(100) + '\n';
-  proposal += `${'Station'.padEnd(25)} ${'Market'.padEnd(20)} ${'Prime Spots'.padEnd(15)} ${'ROS Spots'.padEnd(15)} ${'Monthly'.padEnd(12)}\n`;
-  proposal += `${' '.padEnd(25)} ${' '.padEnd(20)} ${'M-SU 5a-8p'.padEnd(15)} ${'M-SU 6a-12a'.padEnd(15)}\n`;
-  proposal += '-'.repeat(100) + '\n';
-  
+function generateBarterProposalTable(stations, products) {
   const perStationMonthly = products.reduce((sum, p) => sum + p.monthlyValue, 0);
+  const totalMonthly = perStationMonthly * stations.length;
+  const totalAnnual = totalMonthly * 12;
   
-  // Get barter spot allocations from productState.manualMinutes or calculate
-  stations.forEach(station => {
+  let totalPrimeSpots = 0;
+  let totalROSSpots = 0;
+  
+  let html = `
+    <div style="font-family: Arial, sans-serif; color: white; background: #0f1823; padding: 20px; border-radius: 8px;">
+      <h2 style="text-align: center; margin: 0 0 24px 0; color: #5fb584; font-size: 20px;">FUTURI MEDIA - RADIO PROPOSAL (BARTER)</h2>
+      
+      <div style="margin-bottom: 30px;">
+        <h3 style="color: #5fb584; font-size: 14px; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">Products:</h3>
+        <table style="width: 100%; border-collapse: collapse; background: white; color: black; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tbody>`;
+  
+  products.forEach((product, idx) => {
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8f9fa';
+    html += `
+            <tr style="background: ${bgColor};">
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0;">${product.name}</td>
+              <td style="padding: 12px 16px; text-align: right; font-weight: 600; border-bottom: 1px solid #e0e0e0;">$${product.monthlyValue.toLocaleString()}/month</td>
+            </tr>`;
+  });
+  
+  html += `
+          </tbody>
+        </table>
+      </div>
+      
+      <div>
+        <h3 style="color: #5fb584; font-size: 14px; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">Stations & Barter Spots:</h3>
+        <table style="width: 100%; border-collapse: collapse; background: white; color: black; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <thead>
+            <tr style="background: #4a6178; color: white;">
+              <th style="padding: 12px 16px; text-align: left; font-weight: 600;">Station</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 600;">Market</th>
+              <th style="padding: 12px 16px; text-align: center; font-weight: 600;">Prime Spots<br><span style="font-size: 10px; font-weight: normal;">M-SU 5a-8p</span></th>
+              <th style="padding: 12px 16px; text-align: center; font-weight: 600;">ROS Spots<br><span style="font-size: 10px; font-weight: normal;">M-SU 6a-12a</span></th>
+            </tr>
+          </thead>
+          <tbody>`;
+  
+  stations.forEach((station, idx) => {
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8f9fa';
     const manualOverride = productState.manualMinutes.get(station.key);
+    
     let primeSpots = 0;
     let rosSpots = 0;
     
@@ -1408,53 +1389,93 @@ function generateBarterProposal(stations, products) {
       primeSpots = manualOverride.prime || 0;
       rosSpots = manualOverride.ros || 0;
     } else {
-      // Use default allocation (simplified for proposal)
-      // In reality, this would match the calculation from calculateBarterMinutes
-      primeSpots = 1; // Default minimum
-      rosSpots = 1; // Default minimum
+      primeSpots = 1;
+      rosSpots = 1;
     }
+    
+    totalPrimeSpots += primeSpots;
+    totalROSSpots += rosSpots;
     
     const primeSpotsStr = primeSpots > 0 ? `${primeSpots}/day` : 'None';
     const rosSpotsStr = rosSpots > 0 ? `${rosSpots}/day` : 'None';
     
-    proposal += `${station.station.padEnd(25)} ${station.market.padEnd(20)} ${primeSpotsStr.padEnd(15)} ${rosSpotsStr.padEnd(15)} $${perStationMonthly.toLocaleString().padStart(10)}\n`;
+    html += `
+            <tr style="background: ${bgColor};">
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0; font-weight: 500;">${station.station}</td>
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0;">${station.market}</td>
+              <td style="padding: 12px 16px; text-align: center; font-weight: 600; border-bottom: 1px solid #e0e0e0;">${primeSpotsStr}</td>
+              <td style="padding: 12px 16px; text-align: center; font-weight: 600; border-bottom: 1px solid #e0e0e0;">${rosSpotsStr}</td>
+            </tr>`;
   });
   
-  proposal += '\n';
-  proposal += '-'.repeat(100) + '\n';
-  const totalMonthly = perStationMonthly * stations.length;
-  const totalAnnual = totalMonthly * 12;
+  html += `
+          </tbody>
+          <tfoot>
+            <tr style="background: #e8f4f0; font-weight: 700;">
+              <td colspan="4" style="padding: 16px; text-align: center; border-top: 2px solid #4a6178; font-size: 14px;">
+                MONTHLY VALUE: <span style="color: #0d4a2e;">$${totalMonthly.toLocaleString()}</span>
+                &nbsp;&nbsp;|&nbsp;&nbsp;
+                ANNUAL VALUE: <span style="color: #0d4a2e;">$${totalAnnual.toLocaleString()}</span>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+        
+        <div style="margin-top: 16px; padding: 12px; background: rgba(74, 97, 120, 0.2); border-radius: 6px; font-size: 12px; color: #b0c4d4;">
+          <strong>Note:</strong> Prime = M-SU 5a-8p (Drive Time), ROS = M-SU 6a-12a (Run of Schedule). Spots are per day.
+        </div>
+      </div>
+    </div>`;
   
-  proposal += `${'TOTAL MONTHLY VALUE:'.padEnd(80)} $${totalMonthly.toLocaleString().padStart(15)}\n`;
-  proposal += `${'TOTAL ANNUAL VALUE:'.padEnd(80)} $${totalAnnual.toLocaleString().padStart(15)}\n`;
-  proposal += '\n';
-  proposal += 'NOTE: Prime = M-SU 5a-8p (Drive Time), ROS = M-SU 6a-12a (Run of Schedule)\n';
-  proposal += '='.repeat(100) + '\n';
-  
-  return proposal;
+  return html;
 }
 
-function generateMixedProposal(stations, products) {
-  let proposal = 'FUTURI MEDIA - RADIO PROPOSAL (MIXED: CASH + BARTER)\n';
-  proposal += '='.repeat(100) + '\n\n';
-  
-  // Products section
-  proposal += 'PRODUCTS:\n';
-  proposal += '-'.repeat(100) + '\n';
-  products.forEach(product => {
-    proposal += `${product.name.padEnd(40)} $${product.monthlyValue.toLocaleString()}/month\n`;
-  });
-  proposal += '\n';
-  
-  // Stations section with cash and barter
-  proposal += 'STATIONS (CASH + BARTER):\n';
-  proposal += '-'.repeat(100) + '\n';
-  proposal += `${'Station'.padEnd(25)} ${'Market'.padEnd(20)} ${'Cash/Month'.padEnd(15)} ${'Prime'.padEnd(10)} ${'ROS'.padEnd(10)}\n`;
-  proposal += '-'.repeat(100) + '\n';
-  
+function generateMixedProposalTable(stations, products) {
   const perStationMonthly = products.reduce((sum, p) => sum + p.monthlyValue, 0);
   
-  stations.forEach(station => {
+  let totalCash = 0;
+  let totalPrimeSpots = 0;
+  let totalROSSpots = 0;
+  
+  let html = `
+    <div style="font-family: Arial, sans-serif; color: white; background: #0f1823; padding: 20px; border-radius: 8px;">
+      <h2 style="text-align: center; margin: 0 0 24px 0; color: #5fb584; font-size: 20px;">FUTURI MEDIA - RADIO PROPOSAL (MIXED)</h2>
+      
+      <div style="margin-bottom: 30px;">
+        <h3 style="color: #5fb584; font-size: 14px; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">Products:</h3>
+        <table style="width: 100%; border-collapse: collapse; background: white; color: black; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tbody>`;
+  
+  products.forEach((product, idx) => {
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8f9fa';
+    html += `
+            <tr style="background: ${bgColor};">
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0;">${product.name}</td>
+              <td style="padding: 12px 16px; text-align: right; font-weight: 600; border-bottom: 1px solid #e0e0e0;">$${product.monthlyValue.toLocaleString()}/month</td>
+            </tr>`;
+  });
+  
+  html += `
+          </tbody>
+        </table>
+      </div>
+      
+      <div>
+        <h3 style="color: #5fb584; font-size: 14px; margin: 0 0 12px 0; text-transform: uppercase; letter-spacing: 0.5px;">Stations (Cash + Barter):</h3>
+        <table style="width: 100%; border-collapse: collapse; background: white; color: black; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <thead>
+            <tr style="background: #4a6178; color: white;">
+              <th style="padding: 12px 16px; text-align: left; font-weight: 600;">Station</th>
+              <th style="padding: 12px 16px; text-align: left; font-weight: 600;">Market</th>
+              <th style="padding: 12px 16px; text-align: right; font-weight: 600;">Cash/Month</th>
+              <th style="padding: 12px 16px; text-align: center; font-weight: 600;">Prime<br><span style="font-size: 10px; font-weight: normal;">M-SU 5a-8p</span></th>
+              <th style="padding: 12px 16px; text-align: center; font-weight: 600;">ROS<br><span style="font-size: 10px; font-weight: normal;">M-SU 6a-12a</span></th>
+            </tr>
+          </thead>
+          <tbody>`;
+  
+  stations.forEach((station, idx) => {
+    const bgColor = idx % 2 === 0 ? '#ffffff' : '#f8f9fa';
     const cashValue = productState.stationCashValues.get(station.key) || 0;
     const manualOverride = productState.manualMinutes.get(station.key);
     
@@ -1465,55 +1486,82 @@ function generateMixedProposal(stations, products) {
       primeSpots = manualOverride.prime || 0;
       rosSpots = manualOverride.ros || 0;
     } else {
-      // Calculate based on remaining after cash
       if (cashValue < perStationMonthly) {
         primeSpots = 1;
         rosSpots = 0;
       }
     }
     
-    const cashStr = `$${cashValue.toLocaleString()}`;
+    totalCash += cashValue;
+    totalPrimeSpots += primeSpots;
+    totalROSSpots += rosSpots;
+    
+    const cashStr = cashValue > 0 ? `$${cashValue.toLocaleString()}` : '$0';
     const primeStr = primeSpots > 0 ? `${primeSpots}/day` : 'None';
     const rosStr = rosSpots > 0 ? `${rosSpots}/day` : 'None';
     
-    proposal += `${station.station.padEnd(25)} ${station.market.padEnd(20)} ${cashStr.padEnd(15)} ${primeStr.padEnd(10)} ${rosStr.padEnd(10)}\n`;
-  });
-  
-  proposal += '\n';
-  proposal += '-'.repeat(100) + '\n';
-  
-  // Calculate totals
-  let totalCash = 0;
-  stations.forEach(station => {
-    totalCash += (productState.stationCashValues.get(station.key) || 0);
+    html += `
+            <tr style="background: ${bgColor};">
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0; font-weight: 500;">${station.station}</td>
+              <td style="padding: 12px 16px; border-bottom: 1px solid #e0e0e0;">${station.market}</td>
+              <td style="padding: 12px 16px; text-align: right; font-weight: 600; border-bottom: 1px solid #e0e0e0;">${cashStr}</td>
+              <td style="padding: 12px 16px; text-align: center; font-weight: 600; border-bottom: 1px solid #e0e0e0;">${primeStr}</td>
+              <td style="padding: 12px 16px; text-align: center; font-weight: 600; border-bottom: 1px solid #e0e0e0;">${rosStr}</td>
+            </tr>`;
   });
   
   const totalMonthly = perStationMonthly * stations.length;
   const totalAnnual = totalMonthly * 12;
   const totalBarterMonthly = totalMonthly - totalCash;
-  const totalBarterAnnual = totalBarterMonthly * 12;
   
-  proposal += `${'TOTAL CASH (MONTHLY):'.padEnd(80)} $${totalCash.toLocaleString().padStart(15)}\n`;
-  proposal += `${'TOTAL BARTER VALUE (MONTHLY):'.padEnd(80)} $${totalBarterMonthly.toLocaleString().padStart(15)}\n`;
-  proposal += `${'TOTAL MONTHLY VALUE:'.padEnd(80)} $${totalMonthly.toLocaleString().padStart(15)}\n`;
-  proposal += `${'TOTAL ANNUAL VALUE:'.padEnd(80)} $${totalAnnual.toLocaleString().padStart(15)}\n`;
-  proposal += '\n';
-  proposal += 'NOTE: Prime = M-SU 5a-8p (Drive Time), ROS = M-SU 6a-12a (Run of Schedule)\n';
-  proposal += '='.repeat(100) + '\n';
+  html += `
+          </tbody>
+          <tfoot>
+            <tr style="background: #e8f4f0; font-weight: 700;">
+              <td colspan="2" style="padding: 16px; text-align: right; border-top: 2px solid #4a6178;">CASH TOTAL (MONTHLY):</td>
+              <td colspan="3" style="padding: 16px; text-align: center; font-size: 16px; color: #0d4a2e; border-top: 2px solid #4a6178;">$${totalCash.toLocaleString()}</td>
+            </tr>
+            <tr style="background: #d4ede5; font-weight: 700;">
+              <td colspan="2" style="padding: 16px; text-align: right;">BARTER VALUE (MONTHLY):</td>
+              <td colspan="3" style="padding: 16px; text-align: center; font-size: 16px; color: #0d4a2e;">$${totalBarterMonthly.toLocaleString()}</td>
+            </tr>
+            <tr style="background: #c0e7d8; font-weight: 700;">
+              <td colspan="2" style="padding: 16px; text-align: right;">TOTAL ANNUAL VALUE:</td>
+              <td colspan="3" style="padding: 16px; text-align: center; font-size: 16px; color: #0d4a2e;">$${totalAnnual.toLocaleString()}</td>
+            </tr>
+          </tfoot>
+        </table>
+        
+        <div style="margin-top: 16px; padding: 12px; background: rgba(74, 97, 120, 0.2); border-radius: 6px; font-size: 12px; color: #b0c4d4;">
+          <strong>Note:</strong> This mixed deal combines cash payments with barter inventory. Prime = M-SU 5a-8p (Drive Time), ROS = M-SU 6a-12a (Run of Schedule). Spots are per day.
+        </div>
+      </div>
+    </div>`;
   
-  return proposal;
+  return html;
 }
 
 function copyProposalToClipboard() {
   const proposalTable = $('proposalTable');
-  const text = proposalTable.textContent;
   
-  if (!text || text.includes('No stations') || text.includes('No products')) {
+  if (!proposalTable || !proposalTable.innerHTML || proposalTable.innerHTML.includes('No stations') || proposalTable.innerHTML.includes('No products')) {
     alert('Please generate a proposal first');
     return;
   }
   
-  navigator.clipboard.writeText(text).then(() => {
+  const temp = document.createElement('div');
+  temp.innerHTML = proposalTable.innerHTML;
+  temp.style.position = 'absolute';
+  temp.style.left = '-9999px';
+  document.body.appendChild(temp);
+  
+  const range = document.createRange();
+  range.selectNode(temp);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+  
+  try {
+    document.execCommand('copy');
     const btn = $('btnCopyProposal');
     const originalText = btn.textContent;
     btn.textContent = '✓ Copied!';
@@ -1523,21 +1571,21 @@ function copyProposalToClipboard() {
       btn.textContent = originalText;
       btn.style.background = '';
     }, 2000);
-  }).catch(err => {
-    alert('Failed to copy to clipboard. Please select and copy the text manually.');
-  });
+  } catch (err) {
+    alert('Failed to copy. Please manually select and copy the proposal.');
+  }
+  
+  window.getSelection().removeAllRanges();
+  document.body.removeChild(temp);
 }
 
 function attachProductEventListeners() {
-  // Pricing type radio buttons
   document.querySelectorAll('input[name="pricingType"]').forEach(radio => {
     radio.addEventListener('change', handlePricingTypeChange);
   });
   
-  // Product search
   $('productSearch').addEventListener('input', renderProducts);
   
-  // Select/Clear all buttons
   $('btnSelAllProducts').onclick = () => {
     PRODUCTS.forEach(p => productState.selectedProducts.add(p.id));
     renderProducts();
@@ -1552,15 +1600,10 @@ function attachProductEventListeners() {
   };
   
   $('btnResetPricing').onclick = resetPricingToRateCard;
-  
-  // Reset barter spots to auto
   $('btnResetMinutes').onclick = resetMinutesToAuto;
-  
-  // Proposal generation buttons
   $('btnGenerateProposal').onclick = generateProposal;
   $('btnCopyProposal').onclick = copyProposalToClipboard;
   
-  // Initial render
   renderProducts();
   updateProductSummary();
 }
