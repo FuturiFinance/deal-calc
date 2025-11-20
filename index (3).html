@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Deal Calc — Media Deals (vR2.1)</title>
+  <style>
+    :root {
+      --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
+    }
+    html, body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; margin:0; }
+    header { border-bottom: 1px solid var(--edge); position: sticky; top:0; z-index:10; background: rgba(11,17,23,0.9); backdrop-filter: blur(6px); }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 14px 16px; }
+    h1 { font-size: 18px; margin: 0; }
+    .pill { display:inline-flex; background: var(--pill); border:1px solid var(--edge); border-radius:999px; padding:4px 10px; gap:8px; align-items:center; }
+    .grid { display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .card { background: #0e1621; border:1px solid #223244; border-radius: 14px; padding: 14px; }
+    .title { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #8fa5b9; margin-bottom: 8px; }
+    .row { display:flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .btn { background: #0b2034; color: var(--text); border:1px solid #223244; padding:7px 12px; border-radius: 10px; cursor:pointer; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    input[type="text"] { width: 100%; height:40px; background:#0c131b; border:1px solid #223244; color:#e7eef7; border-radius:10px; padding:8px 10px; }
+    .list { display:flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+    .el { display:flex; align-items:center; gap:8px; justify-content: space-between; padding:6px 10px; border-radius:10px; border:1px solid transparent; }
+    .el:hover { background:#0d1621; border-color:#223244; }
+    .muted { color:#9bb3c7; }
+    .badge { background:#0b233a; border:1px solid #223244; border-radius: 6px; padding:2px 6px; font-size:12px; }
+    .placeholder { border: 1px dashed #2a3b4f; border-radius:10px; padding: 10px 12px; color:#8fa5b9; background:#0b121a; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap row">
+    <h1>Deal Calc — Media Deals</h1>
+    <span class="pill">Build: vR2-1-clean-20251112212545Z</span>
+    <span class="pill">Dataset SHA-256: 41ac991fb01a102e…</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- LANDING -->
+  <div id="landing" class="grid">
+    <section class="card">
+      <div class="title">TV Deals</div>
+      <div class="row">
+        <div class="muted">Coming soon</div>
+        <button class="btn" disabled>Not available yet</button>
+      </div>
+    </section>
+    <section class="card">
+      <div class="title">Radio</div>
+      <div class="row">
+        <div class="muted">Open Radio Deal Selector</div>
+        <button class="btn" id="btnOpenRadio">Go to Radio</button>
+      </div>
+    </section>
+    <section class="card">
+      <div class="title">Other</div>
+      <div class="row">
+        <div class="muted">Coming soon</div>
+        <button class="btn" disabled>Not available yet</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- RADIO VIEW -->
+  <div id="radioView" class="grid hidden" style="grid-template-columns: 1fr;">
+    <div class="row" style="justify-content:flex-start; margin-bottom:6px;">
+      <button class="btn" id="btnBack">← Back to Landing</button>
+    </div>
+
+    <section class="card">
+      <div class="title">Parent</div>
+      <input id="parentSearch" type="text" placeholder="Search parent…"/>
+      <div id="parentResults" class="list"></div>
+    </section>
+
+    <section class="card" id="addCard">
+      <div class="title">Add Parent / Market / Station (not in dataset)</div>
+      <div class="row" style="flex-direction:column; gap:10px; align-items:stretch;">
+        <input id="addParent" type="text" placeholder="Parent name"/>
+        <input id="addMarket" type="text" placeholder="Market name"/>
+        <input id="addStation" type="text" placeholder="Station (e.g., WXYZ-FM)"/>
+        <input id="addFormat" type="text" placeholder="Format (optional)"/>
+        <div class="row">
+          <button class="btn" id="btnAddTriplet">Add</button>
+          <button class="btn" id="btnClearAdd">Clear</button>
+        </div>
+        <div class="muted">Tip: This creates a new record and rebuilds the index so it’s searchable immediately.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="title">Markets (multi-select with search)</div>
+      <div class="row">
+        <input id="marketSearch" type="text" placeholder="Filter markets…"/>
+        <button class="btn" id="btnSelAllMarkets">Select All (filtered)</button>
+        <button class="btn" id="btnClrAllMarkets">Clear (filtered)</button>
+      </div>
+      <div id="marketsPlaceholder" class="placeholder">Pick a parent first…</div>
+      <div id="marketsList" class="list"></div>
+    </section>
+
+    <section class="card">
+      <div class="title">Stations (multi-select with search)</div>
+      <div class="row">
+        <input id="stationSearch" type="text" placeholder="Filter stations…"/>
+        <button class="btn" id="btnSelAllStations">Select All (filtered)</button>
+        <button class="btn" id="btnClrAllStations">Clear (filtered)</button>
+      </div>
+      <div id="stationsPlaceholder" class="placeholder">Pick a parent first…</div>
+      <div id="stationsList" class="list"></div>
+    </section>
+
+    <section class="card">
+      <div class="title">Selected Stations (with AQH)</div>
+      <div id="selectedPreview" class="list"></div>
+      <div class="row">
+        <div class="pill">Count: <span id="selCount">0</span></div>
+        <div class="pill">Prime AQH Sum: <span id="primeSum">0</span></div>
+        <div class="pill">ROS AQH Sum: <span id="rosSum">0</span></div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script>
+// ============================================
+// CONFIGURATION: Data source
+// ============================================
+// Use relative path when hosted on same domain (GitHub Pages)
+const DATA_URL = './radio_data.json';
+// Or use absolute GitHub URL for external hosting:
+// const DATA_URL = 'https://raw.githubusercontent.com/FuturiFinance/deal-calc/refs/heads/main/radio_data.json';
+
+// Global variables
+let DS = { parents: [], markets: [], stations: [] };
+const IDX = {
+  parentSet: new Set(),
+  marketSet: new Set(),
+  stations: [],
+  stationsByParent: new Map(),
+  stationsByParentMarket: new Map(),
+};
+const state = { parent: '', markets: new Set(), stations: new Set() };
+function $(id) { return document.getElementById(id); }
+
+// Load dataset from GitHub
+async function loadDataset() {
+  try {
+    const response = await fetch(DATA_URL);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const data = await response.json();
+    console.log(`Loaded ${data.stations?.length || 0} stations from GitHub`);
+    return data;
+  } catch (error) {
+    console.error('Failed to load dataset:', error);
+    alert('Failed to load radio station data. Please check your internet connection and the GitHub URL configuration.');
+    return { parents: [], markets: [], stations: [] };
+  }
+}
+
+function rebuildIndex(){
+  IDX.parentSet = new Set(DS.parents || []);
+  IDX.marketSet = new Set(DS.markets || []);
+  IDX.stations = DS.stations || [];
+  IDX.stationsByParent.clear();
+  IDX.stationsByParentMarket.clear();
+  (IDX.stations || []).forEach(s => {
+    const p = s.parent || ''; const m = s.market || '';
+    if (!IDX.stationsByParent.has(p)) IDX.stationsByParent.set(p, []);
+    IDX.stationsByParent.get(p).push(s);
+    const key = p + '||' + m;
+    if (!IDX.stationsByParentMarket.has(key)) IDX.stationsByParentMarket.set(key, []);
+    IDX.stationsByParentMarket.get(key).push(s);
+  });
+}
+
+// Helper functions
+function setMarketsEnabled(enabled) {
+  const sel = $('btnSelAllMarkets'); const clr = $('btnClrAllMarkets');
+  if (sel) sel.disabled = !enabled; if (clr) clr.disabled = !enabled;
+  const ph = $('marketsPlaceholder'); if (ph) ph.style.display = enabled ? 'none' : '';
+  const list = $('marketsList'); if (list && !enabled) list.innerHTML = '';
+}
+function setStationsEnabled(enabled) {
+  const sel = $('btnSelAllStations'); const clr = $('btnClrAllStations');
+  if (sel) sel.disabled = !enabled; if (clr) clr.disabled = !enabled;
+  const ph = $('stationsPlaceholder'); if (ph) ph.style.display = enabled ? 'none' : '';
+  const list = $('stationsList'); if (list && !enabled) list.innerHTML = '';
+}
+
+// Initialize app after data loads
+async function initApp() {
+  // Show loading indicator
+  const main = document.querySelector('main');
+  const loading = document.createElement('div');
+  loading.id = 'loadingIndicator';
+  loading.style.cssText = 'text-align:center; padding:40px; font-size:18px; color:var(--text);';
+  loading.innerHTML = '⏳ Loading radio station data...<br><span style="font-size:14px; color:var(--muted);">Fetching from GitHub</span>';
+  main.insertBefore(loading, main.firstChild);
+  
+  // Load data
+  DS = await loadDataset();
+  rebuildIndex();
+  
+  // Remove loading indicator
+  loading.remove();
+  
+  // Setup event listeners
+  setupEventListeners();
+}
+
+function setupEventListeners() {
+  const landing = $('landing'); 
+  const radio = $('radioView');
+
+  
+  // Landing <-> Radio navigation
+  $('btnOpenRadio').onclick = () => { landing.classList.add('hidden'); radio.classList.remove('hidden'); window.scrollTo(0,0); };
+  $('btnBack').onclick = () => { radio.classList.add('hidden'); landing.classList.remove('hidden'); window.scrollTo(0,0); };
+
+  // Initial disabled state
+  setMarketsEnabled(false);
+  setStationsEnabled(false);
+
+  // Search & lists
+  const ps = $('parentSearch'); 
+  ps.addEventListener('input', () => renderParents(ps.value)); 
+  renderParents('');
+  $('marketSearch').addEventListener('input', renderMarkets);
+  $('stationSearch').addEventListener('input', renderStations);
+
+  // Buttons
+  $('btnSelAllMarkets').onclick = () => { 
+    (IDX.stationsByParent.get(state.parent) || []).forEach(s => state.markets.add(s.market)); 
+    renderMarkets(); renderStations(); updatePreview(); 
+  };
+  $('btnClrAllMarkets').onclick = () => { 
+    state.markets.clear(); renderMarkets(); renderStations(); updatePreview(); 
+  };
+  $('btnSelAllStations').onclick = () => { 
+    document.querySelectorAll('#stationsList input[type="checkbox"]').forEach(cb => { 
+      cb.checked = true; state.stations.add(cb.value); 
+    }); 
+    updatePreview(); 
+  };
+  $('btnClrAllStations').onclick = () => { 
+    document.querySelectorAll('#stationsList input[type="checkbox"]').forEach(cb => { 
+      cb.checked = false; state.stations.delete(cb.value); 
+    }); 
+    updatePreview(); 
+  };
+
+  // Manual add
+  attachManualAdd();
+}
+
+// Start the app
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+
+// Manual add
+function attachManualAdd() {
+  const $p = $('addParent'); const $m = $('addMarket'); const $s = $('addStation'); const $f = $('addFormat');
+  const $add = $('btnAddTriplet'); const $clr = $('btnClearAdd');
+  function clearFields() { if($p)$p.value=''; if($m)$m.value=''; if($s)$s.value=''; if($f)$f.value=''; }
+  if ($clr) $clr.addEventListener('click', clearFields);
+  if ($add) $add.addEventListener('click', () => {
+    const parent = ($p?.value||'').trim(), market = ($m?.value||'').trim(), station = ($s?.value||'').trim(), format = ($f?.value||'').trim();
+    if (!parent || !market || !station) { alert('Please provide Parent, Market, and Station.'); return; }
+    DS.stations = DS.stations || []; DS.stations.push({ parent, market, station, format, primeAQH: 0, rosAQH: 0 });
+    DS.parents = Array.from(new Set((DS.parents||[]).concat([parent]))).sort();
+    DS.markets = Array.from(new Set((DS.markets||[]).concat([market]))).sort();
+    rebuildIndex();
+    setParent(parent);
+    renderMarkets(); renderStations(); updatePreview();
+    clearFields();
+    alert('Added and indexed. You can now search/select it.');
+  });
+}
+
+function renderParents(q='') {
+  const list = $('parentResults'); list.innerHTML = '';
+  const qn = q.trim().toLowerCase();
+  const parents = Array.from(IDX.parentSet).filter(p => p.toLowerCase().includes(qn)).sort();
+  parents.slice(0, 300).forEach(p => {
+    const el = document.createElement('div'); el.className = 'el';
+    const btn = document.createElement('button'); btn.className='btn'; btn.textContent = p;
+    btn.onclick = () => setParent(p);
+    el.appendChild(btn); list.appendChild(el);
+  });
+}
+
+function setParent(p) {
+  state.parent = p; state.markets.clear(); state.stations.clear();
+  setMarketsEnabled(!!state.parent); setStationsEnabled(!!state.parent);
+  renderMarkets(); renderStations(); updatePreview();
+}
+
+function renderMarkets() {
+  if (!state.parent) { setMarketsEnabled(false); return; } else { setMarketsEnabled(true); }
+  const list = $('marketsList'); list.innerHTML = '';
+  const q = $('marketSearch').value.trim().toLowerCase();
+  const all = (IDX.stationsByParent.get(state.parent) || []).map(s => s.market);
+  const uniq = Array.from(new Set(all)).filter(m => m.toLowerCase().includes(q)).sort();
+  uniq.forEach(m => {
+    const row = document.createElement('label'); row.className = 'el';
+    const cb = document.createElement('input'); cb.type='checkbox'; cb.value=m; cb.checked = state.markets.has(m);
+    cb.onchange = () => { if (cb.checked) state.markets.add(m); else state.markets.delete(m); renderStations(); updatePreview(); };
+    const name = document.createElement('span'); name.textContent = m;
+    row.appendChild(cb); row.appendChild(name); list.appendChild(row);
+  });
+}
+
+function renderStations() {
+  if (!state.parent) { setStationsEnabled(false); return; } else { setStationsEnabled(true); }
+  const list = $('stationsList'); list.innerHTML = '';
+  const q = $('stationSearch').value.trim().toLowerCase();
+  const markets = Array.from(state.markets);
+  let pool = [];
+  if (markets.length === 0) { pool = IDX.stationsByParent.get(state.parent) || []; }
+  else { markets.forEach(m => { const key = state.parent + '||' + m; (IDX.stationsByParentMarket.get(key) || []).forEach(s => pool.push(s)); }); }
+  pool
+    .filter(s => (s.station || '').toLowerCase().includes(q) || (s.format||'').toLowerCase().includes(q))
+    .sort((a,b)=> (a.station||'').localeCompare(b.station||''))
+    .forEach((s) => {
+      const key = s.parent + '|' + s.market + '|' + s.station;
+      const row = document.createElement('label'); row.className = 'el';
+      const cb = document.createElement('input'); cb.type='checkbox'; cb.value=key; cb.checked = state.stations.has(key);
+      cb.onchange = () => { if (cb.checked) state.stations.add(key); else state.stations.delete(key); updatePreview(); };
+      const name = document.createElement('span'); name.innerHTML = `<strong>${s.station}</strong> <span class="muted">— ${s.market}${s.format?(" ("+s.format+")"):""}</span>`;
+      const aqh = document.createElement('span'); aqh.className='badge'; aqh.textContent = `Prime ${Math.round(s.primeAQH||0)} | ROS ${Math.round(s.rosAQH||0)}`;
+      row.appendChild(cb); row.appendChild(name); row.appendChild(aqh); list.appendChild(row);
+    });
+}
+
+function updatePreview() {
+  const list = $('selectedPreview'); list.innerHTML='';
+  let count = 0, prime = 0, ros = 0;
+  const keyset = new Set(Array.from(state.stations));
+  (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
+    const key = s.parent + '|' + s.market + '|' + s.station;
+    if (keyset.has(key)) {
+      count++; prime += (s.primeAQH||0); ros += (s.rosAQH||0);
+      const row = document.createElement('div'); row.className='el';
+      row.innerHTML = `<span><strong>${s.station}</strong> <span class="muted">— ${s.market}${s.format?(" ("+s.format+")"):""}</span></span>`
+        + `<span class="badge">Prime ${Math.round(s.primeAQH||0)} | ROS ${Math.round(s.rosAQH||0)}</span>`;
+      list.appendChild(row);
+    }
+  });
+  $('selCount').textContent = String(count);
+  $('primeSum').textContent = String(Math.round(prime));
+  $('rosSum').textContent = String(Math.round(ros));
+}
+</script>
+</body>
+</html>
