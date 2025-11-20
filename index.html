@@ -27,6 +27,8 @@
     .badge { background:#0b233a; border:1px solid #223244; border-radius: 6px; padding:2px 6px; font-size:12px; }
     .placeholder { border: 1px dashed #2a3b4f; border-radius:10px; padding: 10px 12px; color:#8fa5b9; background:#0b121a; }
     .hidden { display:none; }
+    input[type="radio"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+    input[type="number"] { background:#0c131b; border:1px solid #223244; color:#e7eef7; border-radius:6px; padding:4px 8px; }
   </style>
 </head>
 <body>
@@ -76,20 +78,6 @@
       <div id="parentResults" class="list"></div>
     </section>
 
-    <section class="card" id="addCard">
-      <div class="title">Add Parent / Market / Station (not in dataset)</div>
-      <div class="row" style="flex-direction:column; gap:10px; align-items:stretch;">
-        <input id="addParent" type="text" placeholder="Parent name"/>
-        <input id="addMarket" type="text" placeholder="Market name"/>
-        <input id="addStation" type="text" placeholder="Station (e.g., WXYZ-FM)"/>
-        <input id="addFormat" type="text" placeholder="Format (optional)"/>
-        <div class="row">
-          <button class="btn" id="btnAddTriplet">Add</button>
-          <button class="btn" id="btnClearAdd">Clear</button>
-        </div>
-        <div class="muted">Tip: This creates a new record and rebuilds the index so it’s searchable immediately.</div>
-      </div>
-    </section>
 
     <section class="card">
       <div class="title">Markets (multi-select with search)</div>
@@ -122,6 +110,60 @@
         <div class="pill">ROS AQH Sum: <span id="rosSum">0</span></div>
       </div>
     </section>
+
+    <section class="card">
+      <div class="title">Products & Pricing</div>
+      
+      <!-- Pricing Type Selection -->
+      <div class="row" style="margin-bottom: 12px;">
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="radio" name="pricingType" value="cash" checked>
+          <span>Cash</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="radio" name="pricingType" value="barter">
+          <span>Barter</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:8px;">
+          <input type="radio" name="pricingType" value="mixed" disabled>
+          <span>Mixed (Coming Soon)</span>
+        </label>
+      </div>
+
+      <!-- CPM Display (for Barter) -->
+      <div id="cpmDisplay" class="hidden" style="margin-bottom: 12px;">
+        <div class="row">
+          <span class="muted">CPM:</span>
+          <span class="badge">$2.00 (approval required to change)</span>
+        </div>
+      </div>
+
+      <!-- Products List -->
+      <div class="row" style="margin-bottom: 8px;">
+        <input id="productSearch" type="text" placeholder="Search products…"/>
+        <button class="btn" id="btnSelAllProducts">Select All</button>
+        <button class="btn" id="btnClrAllProducts">Clear All</button>
+        <button class="btn" id="btnResetPricing">Reset to Rate Card</button>
+      </div>
+      <div id="productsList" class="list"></div>
+
+      <!-- Summary -->
+      <div class="row" style="margin-top: 12px;">
+        <div class="pill">Products Selected: <span id="productCount">0</span></div>
+        <div class="pill">Total Value: $<span id="totalValue">0</span></div>
+      </div>
+    </section>
+
+    <!-- Barter Minutes Breakdown -->
+    <section class="card hidden" id="barterMinutesSection">
+      <div class="title">Barter Minutes Required</div>
+      <div class="muted" style="margin-bottom: 12px;">Minutes automatically distributed across selected stations based on AQH</div>
+      <div id="barterBreakdown" class="list"></div>
+      <div class="row" style="margin-top: 12px;">
+        <div class="pill">Total Prime Minutes: <span id="totalPrimeMinutes">0</span></div>
+        <div class="pill">Total ROS Minutes: <span id="totalROSMinutes">0</span></div>
+      </div>
+    </section>
   </div>
 </main>
 
@@ -145,6 +187,33 @@ const IDX = {
 };
 const state = { parent: '', markets: new Set(), stations: new Set() };
 function $(id) { return document.getElementById(id); }
+
+// Products configuration
+const PRODUCTS = [
+  { id: 'topicpulse', name: 'TopicPulse', cash: 1500, barter: 2040 },
+  { id: 'topicpulse_iv', name: 'TopicPulse w/ Instant Video', cash: 2000, barter: 2720 },
+  { id: 'topline_podcast', name: 'TopLine - Podcast', cash: 2500, barter: 3400 },
+  { id: 'topline_agency', name: 'TopLine - Agency', cash: 2500, barter: 3400 },
+  { id: 'post', name: 'POST', cash: 1000, barter: 1360 },
+  { id: 'mobile', name: 'Mobile', cash: 750, barter: 1020 },
+  { id: 'streaming', name: 'Streaming', cash: 500, barter: 680 },
+  { id: 'ldr', name: 'LDR', cash: 750, barter: 1020 },
+  { id: 'prep_plus', name: 'Prep+', cash: 500, barter: 680 },
+  { id: 'instant_video', name: 'Instant Video add-on', cash: 500, barter: 680 },
+  { id: 'faai_nights', name: 'FAAI - Nights/Overnights/Weekends', cash: 1500, barter: 2040 },
+  { id: 'faai_247', name: 'FAAI - 24/7', cash: 5000, barter: 6800 },
+  { id: 'faai_daily', name: 'FAAI - Daily Weather/News', cash: 1000, barter: 1360 },
+  { id: 'spoton_audio', name: 'SpotOn - Audio', cash: 750, barter: 1020 },
+  { id: 'spoton_video', name: 'SpotOn Video', cash: null, barter: null },
+  { id: 'topline', name: 'TopLine', cash: null, barter: null }
+];
+
+const productState = {
+  selectedProducts: new Set(),
+  pricingType: 'cash',
+  customPrices: new Map(), // productId -> custom price
+  cpm: 2.00
+};
 
 // Load dataset from GitHub
 async function loadDataset() {
@@ -253,8 +322,8 @@ function setupEventListeners() {
     updatePreview(); 
   };
 
-  // Manual add
-  attachManualAdd();
+  // Products panel
+  attachProductEventListeners();
 }
 
 // Start the app
@@ -262,26 +331,6 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
 } else {
   initApp();
-}
-
-// Manual add
-function attachManualAdd() {
-  const $p = $('addParent'); const $m = $('addMarket'); const $s = $('addStation'); const $f = $('addFormat');
-  const $add = $('btnAddTriplet'); const $clr = $('btnClearAdd');
-  function clearFields() { if($p)$p.value=''; if($m)$m.value=''; if($s)$s.value=''; if($f)$f.value=''; }
-  if ($clr) $clr.addEventListener('click', clearFields);
-  if ($add) $add.addEventListener('click', () => {
-    const parent = ($p?.value||'').trim(), market = ($m?.value||'').trim(), station = ($s?.value||'').trim(), format = ($f?.value||'').trim();
-    if (!parent || !market || !station) { alert('Please provide Parent, Market, and Station.'); return; }
-    DS.stations = DS.stations || []; DS.stations.push({ parent, market, station, format, primeAQH: 0, rosAQH: 0 });
-    DS.parents = Array.from(new Set((DS.parents||[]).concat([parent]))).sort();
-    DS.markets = Array.from(new Set((DS.markets||[]).concat([market]))).sort();
-    rebuildIndex();
-    setParent(parent);
-    renderMarkets(); renderStations(); updatePreview();
-    clearFields();
-    alert('Added and indexed. You can now search/select it.');
-  });
 }
 
 function renderParents(q='') {
@@ -356,7 +405,289 @@ function updatePreview() {
   $('selCount').textContent = String(count);
   $('primeSum').textContent = String(Math.round(prime));
   $('rosSum').textContent = String(Math.round(ros));
+  
+  // Update product calculations when stations change
+  updateProductCalculations();
 }
+
+// ============================================
+// PRODUCTS FUNCTIONS
+// ============================================
+
+function renderProducts() {
+  const list = $('productsList');
+  list.innerHTML = '';
+  const q = $('productSearch').value.trim().toLowerCase();
+  const pricingType = productState.pricingType;
+  
+  PRODUCTS
+    .filter(p => p.name.toLowerCase().includes(q))
+    .forEach(product => {
+      const row = document.createElement('div');
+      row.className = 'el';
+      row.style.flexDirection = 'column';
+      row.style.alignItems = 'stretch';
+      row.style.gap = '8px';
+      
+      // Top row: checkbox and name
+      const topRow = document.createElement('label');
+      topRow.style.display = 'flex';
+      topRow.style.alignItems = 'center';
+      topRow.style.gap = '8px';
+      topRow.style.justifyContent = 'space-between';
+      
+      const leftSide = document.createElement('div');
+      leftSide.style.display = 'flex';
+      leftSide.style.alignItems = 'center';
+      leftSide.style.gap = '8px';
+      
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = productState.selectedProducts.has(product.id);
+      cb.onchange = () => {
+        if (cb.checked) {
+          productState.selectedProducts.add(product.id);
+        } else {
+          productState.selectedProducts.delete(product.id);
+          productState.customPrices.delete(product.id);
+        }
+        renderProducts();
+        updateProductSummary();
+      };
+      
+      const name = document.createElement('span');
+      name.innerHTML = `<strong>${product.name}</strong>`;
+      
+      leftSide.appendChild(cb);
+      leftSide.appendChild(name);
+      
+      // Price display and override
+      const priceContainer = document.createElement('div');
+      priceContainer.style.display = 'flex';
+      priceContainer.style.alignItems = 'center';
+      priceContainer.style.gap = '8px';
+      
+      const rateCardValue = pricingType === 'cash' ? product.cash : product.barter;
+      const currentValue = productState.customPrices.get(product.id) ?? rateCardValue;
+      
+      if (rateCardValue === null) {
+        const tbdBadge = document.createElement('span');
+        tbdBadge.className = 'badge';
+        tbdBadge.textContent = 'TBD';
+        priceContainer.appendChild(tbdBadge);
+      } else {
+        const rateCardBadge = document.createElement('span');
+        rateCardBadge.className = 'badge';
+        rateCardBadge.textContent = `Rate Card: $${rateCardValue.toLocaleString()}`;
+        priceContainer.appendChild(rateCardBadge);
+      }
+      
+      topRow.appendChild(leftSide);
+      topRow.appendChild(priceContainer);
+      
+      // Bottom row: price override (only if product is selected and has a price)
+      if (productState.selectedProducts.has(product.id) && rateCardValue !== null) {
+        const overrideRow = document.createElement('div');
+        overrideRow.style.display = 'flex';
+        overrideRow.style.alignItems = 'center';
+        overrideRow.style.gap = '8px';
+        overrideRow.style.marginLeft = '28px';
+        
+        const label = document.createElement('span');
+        label.className = 'muted';
+        label.textContent = 'Override:';
+        
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.step = pricingType === 'cash' ? '1' : '10';
+        input.value = currentValue;
+        input.style.width = '120px';
+        input.style.height = '32px';
+        input.onchange = () => {
+          const val = parseFloat(input.value);
+          if (!isNaN(val) && val >= 0) {
+            productState.customPrices.set(product.id, val);
+            updateProductSummary();
+          }
+        };
+        
+        overrideRow.appendChild(label);
+        overrideRow.appendChild(input);
+        
+        row.appendChild(topRow);
+        row.appendChild(overrideRow);
+      } else {
+        row.appendChild(topRow);
+      }
+      
+      list.appendChild(row);
+    });
+}
+
+function updateProductSummary() {
+  const pricingType = productState.pricingType;
+  let totalValue = 0;
+  let productCount = 0;
+  
+  productState.selectedProducts.forEach(productId => {
+    const product = PRODUCTS.find(p => p.id === productId);
+    if (!product) return;
+    
+    const rateCardValue = pricingType === 'cash' ? product.cash : product.barter;
+    if (rateCardValue === null) return; // Skip TBD products
+    
+    const value = productState.customPrices.get(productId) ?? rateCardValue;
+    totalValue += value;
+    productCount++;
+  });
+  
+  $('productCount').textContent = String(productCount);
+  $('totalValue').textContent = totalValue.toLocaleString();
+  
+  // Update barter minutes if in barter mode
+  if (pricingType === 'barter') {
+    calculateBarterMinutes(totalValue);
+  }
+}
+
+function calculateBarterMinutes(totalBarterValue) {
+  const barterSection = $('barterMinutesSection');
+  const breakdown = $('barterBreakdown');
+  
+  if (totalBarterValue === 0 || state.stations.size === 0) {
+    barterSection.classList.add('hidden');
+    return;
+  }
+  
+  barterSection.classList.remove('hidden');
+  breakdown.innerHTML = '';
+  
+  // Get selected stations with their AQH
+  const selectedStations = [];
+  (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
+    const key = s.parent + '|' + s.market + '|' + s.station;
+    if (state.stations.has(key)) {
+      selectedStations.push(s);
+    }
+  });
+  
+  if (selectedStations.length === 0) {
+    barterSection.classList.add('hidden');
+    return;
+  }
+  
+  // Calculate minutes needed for each station
+  // Formula: Minutes = (Total Value * 1000) / (AQH * CPM * 728)
+  const cpm = productState.cpm;
+  const factor = cpm * 728; // 7 days * 2 (dayparts) * 52 weeks = 728
+  
+  let totalPrimeMinutes = 0;
+  let totalROSMinutes = 0;
+  
+  // Calculate total non-zero AQH
+  const totalPrimeAQH = selectedStations.reduce((sum, s) => sum + (s.primeAQH || 0), 0);
+  const totalROSAQH = selectedStations.reduce((sum, s) => sum + (s.rosAQH || 0), 0);
+  
+  // Distribute value proportionally based on AQH
+  selectedStations.forEach(station => {
+    const primeAQH = station.primeAQH || 0;
+    const rosAQH = station.rosAQH || 0;
+    
+    let primeMinutes = 0;
+    let rosMinutes = 0;
+    
+    if (primeAQH > 0 && totalPrimeAQH > 0) {
+      const primeShare = (primeAQH / totalPrimeAQH) * totalBarterValue;
+      primeMinutes = Math.ceil((primeShare * 1000) / (primeAQH * factor));
+    }
+    
+    if (rosAQH > 0 && totalROSAQH > 0) {
+      const rosShare = (rosAQH / totalROSAQH) * totalBarterValue;
+      rosMinutes = Math.ceil((rosShare * 1000) / (rosAQH * factor));
+    }
+    
+    totalPrimeMinutes += primeMinutes;
+    totalROSMinutes += rosMinutes;
+    
+    // Only show stations with non-zero minutes
+    if (primeMinutes > 0 || rosMinutes > 0) {
+      const row = document.createElement('div');
+      row.className = 'el';
+      row.innerHTML = `
+        <span><strong>${station.station}</strong> <span class="muted">— ${station.market}</span></span>
+        <span class="badge">Prime: ${primeMinutes} min | ROS: ${rosMinutes} min</span>
+      `;
+      breakdown.appendChild(row);
+    }
+  });
+  
+  $('totalPrimeMinutes').textContent = String(totalPrimeMinutes);
+  $('totalROSMinutes').textContent = String(totalROSMinutes);
+}
+
+function updateProductCalculations() {
+  if (productState.pricingType === 'barter' && productState.selectedProducts.size > 0) {
+    updateProductSummary();
+  }
+}
+
+function handlePricingTypeChange() {
+  const selectedType = document.querySelector('input[name="pricingType"]:checked').value;
+  productState.pricingType = selectedType;
+  
+  // Clear custom prices when switching types
+  productState.customPrices.clear();
+  
+  // Show/hide CPM display for barter
+  const cpmDisplay = $('cpmDisplay');
+  if (selectedType === 'barter') {
+    cpmDisplay.classList.remove('hidden');
+  } else {
+    cpmDisplay.classList.add('hidden');
+    $('barterMinutesSection').classList.add('hidden');
+  }
+  
+  renderProducts();
+  updateProductSummary();
+}
+
+function resetPricingToRateCard() {
+  productState.customPrices.clear();
+  renderProducts();
+  updateProductSummary();
+}
+
+function attachProductEventListeners() {
+  // Pricing type radio buttons
+  document.querySelectorAll('input[name="pricingType"]').forEach(radio => {
+    radio.addEventListener('change', handlePricingTypeChange);
+  });
+  
+  // Product search
+  $('productSearch').addEventListener('input', renderProducts);
+  
+  // Select/Clear all buttons
+  $('btnSelAllProducts').onclick = () => {
+    PRODUCTS.forEach(p => productState.selectedProducts.add(p.id));
+    renderProducts();
+    updateProductSummary();
+  };
+  
+  $('btnClrAllProducts').onclick = () => {
+    productState.selectedProducts.clear();
+    productState.customPrices.clear();
+    renderProducts();
+    updateProductSummary();
+  };
+  
+  $('btnResetPricing').onclick = resetPricingToRateCard;
+  
+  // Initial render
+  renderProducts();
+  updateProductSummary();
+}
+
 </script>
 </body>
 </html>
