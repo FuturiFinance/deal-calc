@@ -125,8 +125,8 @@
           <span>Barter</span>
         </label>
         <label style="display:flex; align-items:center; gap:8px;">
-          <input type="radio" name="pricingType" value="mixed" disabled>
-          <span>Mixed (Coming Soon)</span>
+          <input type="radio" name="pricingType" value="mixed">
+          <span>Mixed (Cash + Barter)</span>
         </label>
       </div>
 
@@ -154,10 +154,24 @@
       </div>
     </section>
 
+    <!-- Cash Values by Station (Mixed Mode Only) -->
+    <section class="card hidden" id="cashValuesSection">
+      <div class="title">Cash Values by Station</div>
+      <div class="muted" style="margin-bottom: 12px;">Enter cash payment for each station. Barter will automatically cover remaining value.</div>
+      <div id="cashValuesList" class="list"></div>
+      <div class="row" style="margin-top: 12px;">
+        <div class="pill">Total Cash: $<span id="totalCashInput">0</span></div>
+        <div class="pill">Remaining for Barter: $<span id="remainingForBarter">0</span></div>
+      </div>
+    </section>
+
     <!-- Barter Minutes Breakdown -->
     <section class="card hidden" id="barterMinutesSection">
       <div class="title">Barter Minutes Required</div>
-      <div class="muted" style="margin-bottom: 12px;">Minutes automatically distributed across selected stations based on AQH</div>
+      <div class="row" style="margin-bottom: 12px;">
+        <div class="muted">Minutes calculated based on AQH. Edit manually if needed.</div>
+        <button class="btn" id="btnResetMinutes">Reset to Auto</button>
+      </div>
       <div id="barterBreakdown" class="list"></div>
       <div class="row" style="margin-top: 12px;">
         <div class="pill">Total Prime Minutes: <span id="totalPrimeMinutes">0</span></div>
@@ -212,7 +226,9 @@ const productState = {
   selectedProducts: new Set(),
   pricingType: 'cash',
   customPrices: new Map(), // productId -> custom price
-  cpm: 2.00
+  cpm: 2.00,
+  manualMinutes: new Map(), // stationKey -> {prime: number, ros: number}
+  stationCashValues: new Map() // stationKey -> cash value (for mixed pricing)
 };
 
 // Load dataset from GitHub
@@ -534,7 +550,8 @@ function updateProductSummary() {
     const product = PRODUCTS.find(p => p.id === productId);
     if (!product) return;
     
-    const rateCardValue = pricingType === 'cash' ? product.cash : product.barter;
+    // For mixed mode, use barter values (higher) for total product value
+    const rateCardValue = (pricingType === 'cash') ? product.cash : product.barter;
     if (rateCardValue === null) return; // Skip TBD products
     
     const value = productState.customPrices.get(productId) ?? rateCardValue;
@@ -545,9 +562,15 @@ function updateProductSummary() {
   $('productCount').textContent = String(productCount);
   $('totalValue').textContent = totalValue.toLocaleString();
   
-  // Update barter minutes if in barter mode
+  // Update barter minutes based on pricing type
   if (pricingType === 'barter') {
     calculateBarterMinutes(totalValue);
+  } else if (pricingType === 'mixed') {
+    renderCashValues();
+  } else {
+    // Cash mode - hide barter sections
+    $('barterMinutesSection').classList.add('hidden');
+    $('cashValuesSection').classList.add('hidden');
   }
 }
 
@@ -568,7 +591,7 @@ function calculateBarterMinutes(totalBarterValue) {
   (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
     const key = s.parent + '|' + s.market + '|' + s.station;
     if (state.stations.has(key)) {
-      selectedStations.push(s);
+      selectedStations.push({...s, key});
     }
   });
   
@@ -578,52 +601,319 @@ function calculateBarterMinutes(totalBarterValue) {
   }
   
   // Calculate minutes needed for each station
-  // Formula: Minutes = (Total Value * 1000) / (AQH * CPM * 728)
   const cpm = productState.cpm;
-  const factor = cpm * 728; // 7 days * 2 (dayparts) * 52 weeks = 728
+  const weeksPerYear = 52;
+  const daysPerWeek = 7;
+  const daypartsPerDay = 2;
+  const factor = cpm * daysPerWeek * daypartsPerDay * weeksPerYear; // CPM * 728
   
-  let totalPrimeMinutes = 0;
-  let totalROSMinutes = 0;
+  let totalPrimeMinutesDaily = 0;
+  let totalROSMinutesDaily = 0;
   
   // Calculate total non-zero AQH
   const totalPrimeAQH = selectedStations.reduce((sum, s) => sum + (s.primeAQH || 0), 0);
   const totalROSAQH = selectedStations.reduce((sum, s) => sum + (s.rosAQH || 0), 0);
+  
+  if (totalPrimeAQH === 0 && totalROSAQH === 0) {
+    breakdown.innerHTML = '<div class="muted" style="padding: 10px;">No stations with AQH values selected</div>';
+    barterSection.classList.add('hidden');
+    return;
+  }
   
   // Distribute value proportionally based on AQH
   selectedStations.forEach(station => {
     const primeAQH = station.primeAQH || 0;
     const rosAQH = station.rosAQH || 0;
     
-    let primeMinutes = 0;
-    let rosMinutes = 0;
+    // Check if there's a manual override
+    const manualOverride = productState.manualMinutes.get(station.key);
     
-    if (primeAQH > 0 && totalPrimeAQH > 0) {
-      const primeShare = (primeAQH / totalPrimeAQH) * totalBarterValue;
-      primeMinutes = Math.ceil((primeShare * 1000) / (primeAQH * factor));
+    let primeMinutesWeekly, rosMinutesWeekly;
+    
+    if (manualOverride) {
+      // Use manual values
+      primeMinutesWeekly = manualOverride.prime || 0;
+      rosMinutesWeekly = manualOverride.ros || 0;
+    } else {
+      // Calculate auto values
+      let primeMinutesPerDay = 0;
+      let rosMinutesPerDay = 0;
+      
+      if (primeAQH > 0 && totalPrimeAQH > 0) {
+        const primeShare = (primeAQH / totalPrimeAQH) * totalBarterValue;
+        primeMinutesPerDay = (primeShare * 1000) / (primeAQH * factor);
+      }
+      
+      if (rosAQH > 0 && totalROSAQH > 0) {
+        const rosShare = (rosAQH / totalROSAQH) * totalBarterValue;
+        rosMinutesPerDay = (rosShare * 1000) / (rosAQH * factor);
+      }
+      
+      primeMinutesWeekly = Math.ceil(primeMinutesPerDay * daysPerWeek);
+      rosMinutesWeekly = Math.ceil(rosMinutesPerDay * daysPerWeek);
     }
     
-    if (rosAQH > 0 && totalROSAQH > 0) {
-      const rosShare = (rosAQH / totalROSAQH) * totalBarterValue;
-      rosMinutes = Math.ceil((rosShare * 1000) / (rosAQH * factor));
-    }
-    
-    totalPrimeMinutes += primeMinutes;
-    totalROSMinutes += rosMinutes;
+    totalPrimeMinutesDaily += primeMinutesWeekly / daysPerWeek;
+    totalROSMinutesDaily += rosMinutesWeekly / daysPerWeek;
     
     // Only show stations with non-zero minutes
-    if (primeMinutes > 0 || rosMinutes > 0) {
+    if (primeMinutesWeekly > 0 || rosMinutesWeekly > 0) {
       const row = document.createElement('div');
       row.className = 'el';
-      row.innerHTML = `
-        <span><strong>${station.station}</strong> <span class="muted">— ${station.market}</span></span>
-        <span class="badge">Prime: ${primeMinutes} min | ROS: ${rosMinutes} min</span>
-      `;
+      row.style.flexDirection = 'column';
+      row.style.alignItems = 'stretch';
+      row.style.gap = '8px';
+      
+      const stationName = document.createElement('div');
+      stationName.innerHTML = `<strong>${station.station}</strong> <span class="muted">— ${station.market}</span>`;
+      
+      // Editable minutes inputs
+      const editRow = document.createElement('div');
+      editRow.style.display = 'flex';
+      editRow.style.gap = '12px';
+      editRow.style.marginLeft = '8px';
+      editRow.style.alignItems = 'center';
+      
+      // Prime minutes input
+      if (primeAQH > 0) {
+        const primeGroup = document.createElement('div');
+        primeGroup.style.display = 'flex';
+        primeGroup.style.alignItems = 'center';
+        primeGroup.style.gap = '6px';
+        
+        const primeLabel = document.createElement('span');
+        primeLabel.className = 'muted';
+        primeLabel.textContent = 'Prime:';
+        
+        const primeInput = document.createElement('input');
+        primeInput.type = 'number';
+        primeInput.min = '0';
+        primeInput.step = '1';
+        primeInput.value = primeMinutesWeekly;
+        primeInput.style.width = '70px';
+        primeInput.style.height = '28px';
+        primeInput.onchange = () => {
+          const val = parseInt(primeInput.value) || 0;
+          const current = productState.manualMinutes.get(station.key) || {};
+          productState.manualMinutes.set(station.key, { ...current, prime: val });
+          calculateBarterMinutes(totalBarterValue);
+        };
+        
+        const primeUnit = document.createElement('span');
+        primeUnit.className = 'muted';
+        primeUnit.style.fontSize = '11px';
+        primeUnit.textContent = 'min/week';
+        
+        primeGroup.appendChild(primeLabel);
+        primeGroup.appendChild(primeInput);
+        primeGroup.appendChild(primeUnit);
+        editRow.appendChild(primeGroup);
+      }
+      
+      // ROS minutes input
+      if (rosAQH > 0) {
+        const rosGroup = document.createElement('div');
+        rosGroup.style.display = 'flex';
+        rosGroup.style.alignItems = 'center';
+        rosGroup.style.gap = '6px';
+        
+        const rosLabel = document.createElement('span');
+        rosLabel.className = 'muted';
+        rosLabel.textContent = 'ROS:';
+        
+        const rosInput = document.createElement('input');
+        rosInput.type = 'number';
+        rosInput.min = '0';
+        rosInput.step = '1';
+        rosInput.value = rosMinutesWeekly;
+        rosInput.style.width = '70px';
+        rosInput.style.height = '28px';
+        rosInput.onchange = () => {
+          const val = parseInt(rosInput.value) || 0;
+          const current = productState.manualMinutes.get(station.key) || {};
+          productState.manualMinutes.set(station.key, { ...current, ros: val });
+          calculateBarterMinutes(totalBarterValue);
+        };
+        
+        const rosUnit = document.createElement('span');
+        rosUnit.className = 'muted';
+        rosUnit.style.fontSize = '11px';
+        rosUnit.textContent = 'min/week';
+        
+        rosGroup.appendChild(rosLabel);
+        rosGroup.appendChild(rosInput);
+        rosGroup.appendChild(rosUnit);
+        editRow.appendChild(rosGroup);
+      }
+      
+      // Show if manual override is active
+      if (manualOverride) {
+        const manualBadge = document.createElement('span');
+        manualBadge.className = 'badge';
+        manualBadge.style.background = '#1a3a52';
+        manualBadge.textContent = '✏️ Manual';
+        editRow.appendChild(manualBadge);
+      }
+      
+      row.appendChild(stationName);
+      row.appendChild(editRow);
       breakdown.appendChild(row);
     }
   });
   
-  $('totalPrimeMinutes').textContent = String(totalPrimeMinutes);
-  $('totalROSMinutes').textContent = String(totalROSMinutes);
+  // Calculate and display totals
+  const totalPrimeWeekly = Math.ceil(totalPrimeMinutesDaily * daysPerWeek);
+  const totalROSWeekly = Math.ceil(totalROSMinutesDaily * daysPerWeek);
+  
+  $('totalPrimeMinutes').textContent = `${totalPrimeWeekly} min/week`;
+  $('totalROSMinutes').textContent = `${totalROSWeekly} min/week`;
+  
+  // Add verification summary (only if no manual overrides)
+  const hasManualOverrides = selectedStations.some(s => productState.manualMinutes.has(s.key));
+  
+  if (!hasManualOverrides) {
+    const verifyRow = document.createElement('div');
+    verifyRow.className = 'muted';
+    verifyRow.style.padding = '10px';
+    verifyRow.style.fontSize = '12px';
+    verifyRow.style.borderTop = '1px solid var(--edge)';
+    verifyRow.style.marginTop = '8px';
+    
+    // Calculate what value these minutes will actually generate (verification)
+    let verifyPrimeValue = 0;
+    let verifyROSValue = 0;
+    
+    selectedStations.forEach(station => {
+      const primeAQH = station.primeAQH || 0;
+      const rosAQH = station.rosAQH || 0;
+      
+      if (primeAQH > 0 && totalPrimeAQH > 0) {
+        const primeShare = (primeAQH / totalPrimeAQH) * totalBarterValue;
+        const primeMinutesPerDay = (primeShare * 1000) / (primeAQH * factor);
+        const gis = (primeAQH / 1000) * daysPerWeek * daypartsPerDay * primeMinutesPerDay;
+        verifyPrimeValue += gis * cpm * weeksPerYear;
+      }
+      
+      if (rosAQH > 0 && totalROSAQH > 0) {
+        const rosShare = (rosAQH / totalROSAQH) * totalBarterValue;
+        const rosMinutesPerDay = (rosShare * 1000) / (rosAQH * factor);
+        const gis = (rosAQH / 1000) * daysPerWeek * daypartsPerDay * rosMinutesPerDay;
+        verifyROSValue += gis * cpm * weeksPerYear;
+      }
+    });
+    
+    const totalVerifyValue = verifyPrimeValue + verifyROSValue;
+    verifyRow.innerHTML = `✓ Auto-calculated to generate approximately $${Math.round(totalVerifyValue).toLocaleString()} annually (target: $${totalBarterValue.toLocaleString()})`;
+    breakdown.appendChild(verifyRow);
+  }
+}
+
+function renderCashValues() {
+  const cashSection = $('cashValuesSection');
+  const cashList = $('cashValuesList');
+  
+  if (state.stations.size === 0) {
+    cashSection.classList.add('hidden');
+    return;
+  }
+  
+  cashSection.classList.remove('hidden');
+  cashList.innerHTML = '';
+  
+  // Get selected stations
+  const selectedStations = [];
+  (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
+    const key = s.parent + '|' + s.market + '|' + s.station;
+    if (state.stations.has(key)) {
+      selectedStations.push({...s, key});
+    }
+  });
+  
+  let totalCash = 0;
+  
+  selectedStations.forEach(station => {
+    const row = document.createElement('div');
+    row.className = 'el';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    
+    const stationName = document.createElement('span');
+    stationName.innerHTML = `<strong>${station.station}</strong> <span class="muted">— ${station.market}</span>`;
+    
+    const inputGroup = document.createElement('div');
+    inputGroup.style.display = 'flex';
+    inputGroup.style.alignItems = 'center';
+    inputGroup.style.gap = '6px';
+    
+    const dollarSign = document.createElement('span');
+    dollarSign.textContent = '$';
+    
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.step = '100';
+    input.placeholder = '0';
+    input.value = productState.stationCashValues.get(station.key) || '';
+    input.style.width = '100px';
+    input.style.height = '32px';
+    input.onchange = () => {
+      const val = parseFloat(input.value) || 0;
+      if (val > 0) {
+        productState.stationCashValues.set(station.key, val);
+      } else {
+        productState.stationCashValues.delete(station.key);
+      }
+      updateMixedPricing();
+    };
+    
+    inputGroup.appendChild(dollarSign);
+    inputGroup.appendChild(input);
+    
+    row.appendChild(stationName);
+    row.appendChild(inputGroup);
+    cashList.appendChild(row);
+    
+    totalCash += (productState.stationCashValues.get(station.key) || 0);
+  });
+  
+  // Update totals
+  $('totalCashInput').textContent = Math.round(totalCash).toLocaleString();
+  
+  // Calculate remaining for barter
+  const totalProductValue = getTotalProductValue('mixed');
+  const remaining = Math.max(0, totalProductValue - totalCash);
+  $('remainingForBarter').textContent = Math.round(remaining).toLocaleString();
+  
+  // Trigger barter calculation with remaining value
+  if (remaining > 0) {
+    calculateBarterMinutes(remaining);
+  } else {
+    $('barterMinutesSection').classList.add('hidden');
+  }
+}
+
+function getTotalProductValue(pricingType) {
+  let total = 0;
+  productState.selectedProducts.forEach(productId => {
+    const product = PRODUCTS.find(p => p.id === productId);
+    if (!product) return;
+    
+    const rateCardValue = pricingType === 'cash' ? product.cash : product.barter;
+    if (rateCardValue === null) return;
+    
+    const value = productState.customPrices.get(productId) ?? rateCardValue;
+    total += value;
+  });
+  return total;
+}
+
+function updateMixedPricing() {
+  renderCashValues();
+}
+
+function resetMinutesToAuto() {
+  productState.manualMinutes.clear();
+  updateProductSummary();
 }
 
 function updateProductCalculations() {
@@ -639,17 +929,35 @@ function handlePricingTypeChange() {
   // Clear custom prices when switching types
   productState.customPrices.clear();
   
-  // Show/hide CPM display for barter
+  // Reset manual minutes when switching modes
+  productState.manualMinutes.clear();
+  
+  // Show/hide sections based on pricing type
   const cpmDisplay = $('cpmDisplay');
-  if (selectedType === 'barter') {
-    cpmDisplay.classList.remove('hidden');
-  } else {
+  const cashValuesSection = $('cashValuesSection');
+  const barterSection = $('barterMinutesSection');
+  
+  if (selectedType === 'cash') {
     cpmDisplay.classList.add('hidden');
-    $('barterMinutesSection').classList.add('hidden');
+    cashValuesSection.classList.add('hidden');
+    barterSection.classList.add('hidden');
+  } else if (selectedType === 'barter') {
+    cpmDisplay.classList.remove('hidden');
+    cashValuesSection.classList.add('hidden');
+    // Barter section will be shown by calculateBarterMinutes if products selected
+  } else if (selectedType === 'mixed') {
+    cpmDisplay.classList.remove('hidden');
+    cashValuesSection.classList.remove('hidden');
+    // Both cash and barter sections will be shown
   }
   
   renderProducts();
   updateProductSummary();
+  
+  // For mixed mode, render cash values section
+  if (selectedType === 'mixed') {
+    renderCashValues();
+  }
 }
 
 function resetPricingToRateCard() {
@@ -682,6 +990,9 @@ function attachProductEventListeners() {
   };
   
   $('btnResetPricing').onclick = resetPricingToRateCard;
+  
+  // Reset barter minutes to auto
+  $('btnResetMinutes').onclick = resetMinutesToAuto;
   
   // Initial render
   renderProducts();
