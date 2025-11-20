@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Deal Calc — Media Deals (vR2.1)</title>
+  <title>Deal Calc — Media Deals (vR2.2)</title>
   <style>
     :root {
       --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
@@ -35,7 +35,7 @@
 <header>
   <div class="wrap row">
     <h1>Deal Calc — Media Deals</h1>
-    <span class="pill">Build: vR2-1-clean-20251112212545Z</span>
+    <span class="pill">Build: vR2-2-optimized-20251120045900Z</span>
     <span class="pill">Dataset SHA-256: 41ac991fb01a102e…</span>
   </div>
 </header>
@@ -165,17 +165,17 @@
       </div>
     </section>
 
-    <!-- Barter Minutes Breakdown -->
+    <!-- Barter Spots Breakdown -->
     <section class="card hidden" id="barterMinutesSection">
-      <div class="title">Barter Minutes Required</div>
+      <div class="title">Barter Spots Required (Optimized)</div>
       <div class="row" style="margin-bottom: 12px;">
-        <div class="muted">Minutes calculated based on AQH. Edit manually if needed.</div>
+        <div class="muted">Spots calculated using least minutes needed. Edit manually if needed.</div>
         <button class="btn" id="btnResetMinutes">Reset to Auto</button>
       </div>
       <div id="barterBreakdown" class="list"></div>
       <div class="row" style="margin-top: 12px;">
-        <div class="pill">Total Prime Minutes: <span id="totalPrimeMinutes">0</span></div>
-        <div class="pill">Total ROS Minutes: <span id="totalROSMinutes">0</span></div>
+        <div class="pill">Total Prime: <span id="totalPrimeMinutes">0</span></div>
+        <div class="pill">Total ROS: <span id="totalROSMinutes">0</span></div>
       </div>
     </section>
   </div>
@@ -227,7 +227,7 @@ const productState = {
   pricingType: 'cash',
   customPrices: new Map(), // productId -> custom price
   cpm: 2.00,
-  manualMinutes: new Map(), // stationKey -> {prime: number, ros: number}
+  manualMinutes: new Map(), // stationKey -> {prime: number, ros: number} - now stores SPOTS not minutes
   stationCashValues: new Map() // stationKey -> cash value (for mixed pricing)
 };
 
@@ -562,7 +562,7 @@ function updateProductSummary() {
   $('productCount').textContent = String(productCount);
   $('totalValue').textContent = totalValue.toLocaleString();
   
-  // Update barter minutes based on pricing type
+  // Update barter spots based on pricing type
   if (pricingType === 'barter') {
     calculateBarterMinutes(totalValue);
   } else if (pricingType === 'mixed') {
@@ -600,61 +600,149 @@ function calculateBarterMinutes(totalBarterValue) {
     return;
   }
   
-  // Calculate minutes needed for each station
   const cpm = productState.cpm;
   const weeksPerYear = 52;
   const daysPerWeek = 7;
   const daypartsPerDay = 2;
   const factor = cpm * daysPerWeek * daypartsPerDay * weeksPerYear; // CPM * 728
   
-  let totalPrimeMinutesDaily = 0;
-  let totalROSMinutesDaily = 0;
+  // Check if any station has manual overrides
+  const hasAnyManualOverrides = selectedStations.some(s => productState.manualMinutes.has(s.key));
   
-  // Calculate total non-zero AQH
-  const totalPrimeAQH = selectedStations.reduce((sum, s) => sum + (s.primeAQH || 0), 0);
-  const totalROSAQH = selectedStations.reduce((sum, s) => sum + (s.rosAQH || 0), 0);
+  let stationSpots = [];
   
-  if (totalPrimeAQH === 0 && totalROSAQH === 0) {
-    breakdown.innerHTML = '<div class="muted" style="padding: 10px;">No stations with AQH values selected</div>';
-    barterSection.classList.add('hidden');
-    return;
-  }
-  
-  // Distribute value proportionally based on AQH
-  selectedStations.forEach(station => {
-    const primeAQH = station.primeAQH || 0;
-    const rosAQH = station.rosAQH || 0;
-    
-    // Check if there's a manual override
-    const manualOverride = productState.manualMinutes.get(station.key);
-    
-    let primeMinutesDaily, rosMinutesDaily;
-    
-    if (manualOverride) {
-      // Use manual values (stored as daily)
-      primeMinutesDaily = manualOverride.prime || 0;
-      rosMinutesDaily = manualOverride.ros || 0;
-    } else {
-      // Calculate auto values (already per day)
-      primeMinutesDaily = 0;
-      rosMinutesDaily = 0;
+  if (hasAnyManualOverrides) {
+    // Use manual values
+    selectedStations.forEach(station => {
+      const primeAQH = station.primeAQH || 0;
+      const rosAQH = station.rosAQH || 0;
+      const manualOverride = productState.manualMinutes.get(station.key);
       
-      if (primeAQH > 0 && totalPrimeAQH > 0) {
-        const primeShare = (primeAQH / totalPrimeAQH) * totalBarterValue;
-        primeMinutesDaily = (primeShare * 1000) / (primeAQH * factor);
+      stationSpots.push({
+        station,
+        primeSpots: manualOverride?.prime || 0,
+        rosSpots: manualOverride?.ros || 0,
+        primeAQH,
+        rosAQH,
+        manual: true
+      });
+    });
+  } else {
+    // AUTO-CALCULATE: Optimize for least minutes needed
+    // Calculate value per spot for each station
+    const stationEfficiency = [];
+    
+    selectedStations.forEach(station => {
+      const primeAQH = station.primeAQH || 0;
+      const rosAQH = station.rosAQH || 0;
+      
+      if (primeAQH > 0) {
+        const primeSpotValue = (primeAQH / 1000) * factor; // Annual value per spot
+        stationEfficiency.push({
+          station,
+          type: 'prime',
+          aqh: primeAQH,
+          valuePerSpot: primeSpotValue,
+          efficiency: primeSpotValue // Higher is better
+        });
       }
       
-      if (rosAQH > 0 && totalROSAQH > 0) {
-        const rosShare = (rosAQH / totalROSAQH) * totalBarterValue;
-        rosMinutesDaily = (rosShare * 1000) / (rosAQH * factor);
+      if (rosAQH > 0) {
+        const rosSpotValue = (rosAQH / 1000) * factor; // Annual value per spot
+        stationEfficiency.push({
+          station,
+          type: 'ros',
+          aqh: rosAQH,
+          valuePerSpot: rosSpotValue,
+          efficiency: rosSpotValue // Higher is better
+        });
+      }
+    });
+    
+    // Sort by efficiency (highest value per spot first)
+    stationEfficiency.sort((a, b) => b.efficiency - a.efficiency);
+    
+    // Allocate whole spots to reach target value (within ±5%)
+    const targetMin = totalBarterValue * 0.95;
+    const targetMax = totalBarterValue * 1.05;
+    
+    let currentValue = 0;
+    const allocation = new Map(); // station.key -> {prime: number, ros: number}
+    
+    for (const entry of stationEfficiency) {
+      const stationKey = entry.station.key;
+      
+      if (!allocation.has(stationKey)) {
+        allocation.set(stationKey, { prime: 0, ros: 0 });
+      }
+      
+      // Try adding spots one at a time until we reach target
+      while (currentValue < targetMin) {
+        if (entry.type === 'prime') {
+          allocation.get(stationKey).prime += 1;
+        } else {
+          allocation.get(stationKey).ros += 1;
+        }
+        currentValue += entry.valuePerSpot;
+        
+        // Stop if we exceed max tolerance
+        if (currentValue > targetMax) {
+          // Remove the last spot we added
+          if (entry.type === 'prime') {
+            allocation.get(stationKey).prime -= 1;
+          } else {
+            allocation.get(stationKey).ros -= 1;
+          }
+          currentValue -= entry.valuePerSpot;
+          break;
+        }
+      }
+      
+      // If we've reached target range, stop allocating
+      if (currentValue >= targetMin && currentValue <= targetMax) {
+        break;
       }
     }
     
-    totalPrimeMinutesDaily += primeMinutesDaily;
-    totalROSMinutesDaily += rosMinutesDaily;
+    // Convert allocation to stationSpots format
+    selectedStations.forEach(station => {
+      const spots = allocation.get(station.key) || { prime: 0, ros: 0 };
+      stationSpots.push({
+        station,
+        primeSpots: spots.prime,
+        rosSpots: spots.ros,
+        primeAQH: station.primeAQH || 0,
+        rosAQH: station.rosAQH || 0,
+        manual: false
+      });
+    });
+  }
+  
+  // Calculate totals
+  let totalPrimeSpots = 0;
+  let totalROSSpots = 0;
+  let totalActualValue = 0;
+  
+  stationSpots.forEach(entry => {
+    totalPrimeSpots += entry.primeSpots;
+    totalROSSpots += entry.rosSpots;
     
-    // Only show stations with non-zero minutes
-    if (primeMinutesDaily > 0 || rosMinutesDaily > 0) {
+    if (entry.primeAQH > 0 && entry.primeSpots > 0) {
+      const primeValue = (entry.primeAQH / 1000) * factor * entry.primeSpots;
+      totalActualValue += primeValue;
+    }
+    
+    if (entry.rosAQH > 0 && entry.rosSpots > 0) {
+      const rosValue = (entry.rosAQH / 1000) * factor * entry.rosSpots;
+      totalActualValue += rosValue;
+    }
+  });
+  
+  // Render station breakdown
+  stationSpots
+    .filter(entry => entry.primeSpots > 0 || entry.rosSpots > 0)
+    .forEach(entry => {
+      const station = entry.station;
       const row = document.createElement('div');
       row.className = 'el';
       row.style.flexDirection = 'column';
@@ -664,15 +752,15 @@ function calculateBarterMinutes(totalBarterValue) {
       const stationName = document.createElement('div');
       stationName.innerHTML = `<strong>${station.station}</strong> <span class="muted">— ${station.market}</span>`;
       
-      // Editable minutes inputs
+      // Editable spots inputs (whole numbers only)
       const editRow = document.createElement('div');
       editRow.style.display = 'flex';
       editRow.style.gap = '12px';
       editRow.style.marginLeft = '8px';
       editRow.style.alignItems = 'center';
       
-      // Prime minutes input
-      if (primeAQH > 0) {
+      // Prime spots input
+      if (entry.primeAQH > 0) {
         const primeGroup = document.createElement('div');
         primeGroup.style.display = 'flex';
         primeGroup.style.alignItems = 'center';
@@ -685,12 +773,12 @@ function calculateBarterMinutes(totalBarterValue) {
         const primeInput = document.createElement('input');
         primeInput.type = 'number';
         primeInput.min = '0';
-        primeInput.step = '0.1';
-        primeInput.value = primeMinutesDaily.toFixed(2);
-        primeInput.style.width = '80px';
+        primeInput.step = '1'; // Whole numbers only
+        primeInput.value = entry.primeSpots;
+        primeInput.style.width = '60px';
         primeInput.style.height = '28px';
         primeInput.onchange = () => {
-          const val = parseFloat(primeInput.value) || 0;
+          const val = Math.round(parseFloat(primeInput.value) || 0);
           const current = productState.manualMinutes.get(station.key) || {};
           productState.manualMinutes.set(station.key, { ...current, prime: val });
           calculateBarterMinutes(totalBarterValue);
@@ -699,16 +787,24 @@ function calculateBarterMinutes(totalBarterValue) {
         const primeUnit = document.createElement('span');
         primeUnit.className = 'muted';
         primeUnit.style.fontSize = '11px';
-        primeUnit.textContent = 'min/day';
+        primeUnit.textContent = 'spots/day';
+        
+        // Show value per spot
+        const primeValuePerSpot = (entry.primeAQH / 1000) * factor;
+        const primeValueBadge = document.createElement('span');
+        primeValueBadge.className = 'badge';
+        primeValueBadge.style.fontSize = '10px';
+        primeValueBadge.textContent = `$${Math.round(primeValuePerSpot).toLocaleString()}/yr`;
         
         primeGroup.appendChild(primeLabel);
         primeGroup.appendChild(primeInput);
         primeGroup.appendChild(primeUnit);
+        primeGroup.appendChild(primeValueBadge);
         editRow.appendChild(primeGroup);
       }
       
-      // ROS minutes input
-      if (rosAQH > 0) {
+      // ROS spots input
+      if (entry.rosAQH > 0) {
         const rosGroup = document.createElement('div');
         rosGroup.style.display = 'flex';
         rosGroup.style.alignItems = 'center';
@@ -721,12 +817,12 @@ function calculateBarterMinutes(totalBarterValue) {
         const rosInput = document.createElement('input');
         rosInput.type = 'number';
         rosInput.min = '0';
-        rosInput.step = '0.1';
-        rosInput.value = rosMinutesDaily.toFixed(2);
-        rosInput.style.width = '80px';
+        rosInput.step = '1'; // Whole numbers only
+        rosInput.value = entry.rosSpots;
+        rosInput.style.width = '60px';
         rosInput.style.height = '28px';
         rosInput.onchange = () => {
-          const val = parseFloat(rosInput.value) || 0;
+          const val = Math.round(parseFloat(rosInput.value) || 0);
           const current = productState.manualMinutes.get(station.key) || {};
           productState.manualMinutes.set(station.key, { ...current, ros: val });
           calculateBarterMinutes(totalBarterValue);
@@ -735,16 +831,24 @@ function calculateBarterMinutes(totalBarterValue) {
         const rosUnit = document.createElement('span');
         rosUnit.className = 'muted';
         rosUnit.style.fontSize = '11px';
-        rosUnit.textContent = 'min/day';
+        rosUnit.textContent = 'spots/day';
+        
+        // Show value per spot
+        const rosValuePerSpot = (entry.rosAQH / 1000) * factor;
+        const rosValueBadge = document.createElement('span');
+        rosValueBadge.className = 'badge';
+        rosValueBadge.style.fontSize = '10px';
+        rosValueBadge.textContent = `$${Math.round(rosValuePerSpot).toLocaleString()}/yr`;
         
         rosGroup.appendChild(rosLabel);
         rosGroup.appendChild(rosInput);
         rosGroup.appendChild(rosUnit);
+        rosGroup.appendChild(rosValueBadge);
         editRow.appendChild(rosGroup);
       }
       
       // Show if manual override is active
-      if (manualOverride) {
+      if (entry.manual) {
         const manualBadge = document.createElement('span');
         manualBadge.className = 'badge';
         manualBadge.style.background = '#1a3a52';
@@ -755,57 +859,13 @@ function calculateBarterMinutes(totalBarterValue) {
       row.appendChild(stationName);
       row.appendChild(editRow);
       breakdown.appendChild(row);
-    }
-  });
+    });
   
-  // Calculate and display totals (daily minutes)
-  $('totalPrimeMinutes').textContent = `${totalPrimeMinutesDaily.toFixed(2)} min/day`;
-  $('totalROSMinutes').textContent = `${totalROSMinutesDaily.toFixed(2)} min/day`;
+  // Display totals
+  $('totalPrimeMinutes').textContent = `${totalPrimeSpots} spots/day`;
+  $('totalROSMinutes').textContent = `${totalROSSpots} spots/day`;
   
-  // Calculate actual value these minutes will generate
-  let actualPrimeValue = 0;
-  let actualROSValue = 0;
-  
-  selectedStations.forEach(station => {
-    const primeAQH = station.primeAQH || 0;
-    const rosAQH = station.rosAQH || 0;
-    
-    // Get the actual minutes (manual or auto)
-    const stationMinutes = productState.manualMinutes.get(station.key);
-    let actualPrimeMinutes = 0;
-    let actualROSMinutes = 0;
-    
-    if (stationMinutes) {
-      actualPrimeMinutes = stationMinutes.prime || 0;
-      actualROSMinutes = stationMinutes.ros || 0;
-    } else {
-      // Calculate auto minutes
-      if (primeAQH > 0 && totalPrimeAQH > 0) {
-        const primeShare = (primeAQH / totalPrimeAQH) * totalBarterValue;
-        actualPrimeMinutes = (primeShare * 1000) / (primeAQH * factor);
-      }
-      if (rosAQH > 0 && totalROSAQH > 0) {
-        const rosShare = (rosAQH / totalROSAQH) * totalBarterValue;
-        actualROSMinutes = (rosShare * 1000) / (rosAQH * factor);
-      }
-    }
-    
-    // Calculate value: GI's × CPM × 52
-    // GI's = (AQH / 1000) × 7 days × 2 dayparts × Minutes per day
-    if (primeAQH > 0) {
-      const gis = (primeAQH / 1000) * daysPerWeek * daypartsPerDay * actualPrimeMinutes;
-      actualPrimeValue += gis * cpm * weeksPerYear;
-    }
-    
-    if (rosAQH > 0) {
-      const gis = (rosAQH / 1000) * daysPerWeek * daypartsPerDay * actualROSMinutes;
-      actualROSValue += gis * cpm * weeksPerYear;
-    }
-  });
-  
-  const totalActualValue = actualPrimeValue + actualROSValue;
-  
-  // Show target vs actual (monthly and annual)
+  // Show target vs actual with validation
   const verifyRow = document.createElement('div');
   verifyRow.style.padding = '12px';
   verifyRow.style.fontSize = '12px';
@@ -815,8 +875,11 @@ function calculateBarterMinutes(totalBarterValue) {
   verifyRow.style.flexDirection = 'column';
   verifyRow.style.gap = '8px';
   
-  const hasManualOverrides = selectedStations.some(s => productState.manualMinutes.has(s.key));
-  const status = hasManualOverrides ? '✏️ Manual' : '✓ Auto-calculated';
+  const variance = ((totalActualValue - totalBarterValue) / totalBarterValue) * 100;
+  const isWithinTolerance = Math.abs(variance) <= 5;
+  
+  const status = hasAnyManualOverrides ? '✏️ Manual' : '✓ Optimized';
+  const statusColor = isWithinTolerance ? 'var(--muted)' : '#ff6b6b';
   
   // Monthly values
   const targetMonthly = totalBarterValue / 12;
@@ -831,13 +894,17 @@ function calculateBarterMinutes(totalBarterValue) {
     </div>
   `;
   
-  // Annual values
+  // Annual values with variance warning
   const annualRow = document.createElement('div');
+  const varianceText = variance > 0 ? `+${variance.toFixed(1)}%` : `${variance.toFixed(1)}%`;
+  const warningText = isWithinTolerance ? '' : ' ⚠️ Outside ±5% tolerance';
+  
   annualRow.innerHTML = `
     <strong>Annual Value:</strong>
     <div style="margin-left: 16px; color: var(--muted);">
       Target: $${Math.round(totalBarterValue).toLocaleString()}<br>
-      Actual: $${Math.round(totalActualValue).toLocaleString()} ${status}
+      Actual: $${Math.round(totalActualValue).toLocaleString()} ${status}<br>
+      <span style="color: ${statusColor}; font-weight: 500;">Variance: ${varianceText}${warningText}</span>
     </div>
   `;
   
@@ -967,7 +1034,7 @@ function handlePricingTypeChange() {
   // Clear custom prices when switching types
   productState.customPrices.clear();
   
-  // Reset manual minutes when switching modes
+  // Reset manual spots when switching modes
   productState.manualMinutes.clear();
   
   // Show/hide sections based on pricing type
@@ -1029,7 +1096,7 @@ function attachProductEventListeners() {
   
   $('btnResetPricing').onclick = resetPricingToRateCard;
   
-  // Reset barter minutes to auto
+  // Reset barter spots to auto
   $('btnResetMinutes').onclick = resetMinutesToAuto;
   
   // Initial render
