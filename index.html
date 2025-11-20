@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Deal Calc — Media Deals (vR2.5)</title>
+  <title>Deal Calc — Media Deals (vR2.7)</title>
   <style>
     :root {
       --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
@@ -36,7 +36,7 @@
 <header>
   <div class="wrap row">
     <h1>Deal Calc — Media Deals</h1>
-    <span class="pill">Build: vR2-5-cash-summary-20251120051800Z</span>
+    <span class="pill">Build: vR2-7-distributed-spots-20251120053000Z</span>
     <span class="pill">Dataset SHA-256: 41ac991fb01a102e…</span>
   </div>
 </header>
@@ -170,9 +170,9 @@
 
 <!-- Barter Spots Breakdown / Cash Summary -->
 <section class="card hidden" id="barterMinutesSection">
-  <div class="title" id="barterSectionTitle">Barter Spots Required (Optimized)</div>
+  <div class="title" id="barterSectionTitle">Barter Spots Required (Distributed)</div>
   <div class="row" style="margin-bottom: 12px;" id="barterControls">
-    <div class="muted">Spots calculated using least minutes needed. Edit manually if needed.</div>
+    <div class="muted">Spots distributed proportionally across all stations. Edit manually if needed.</div>
     <button class="btn" id="btnResetMinutes">Reset to Auto</button>
   </div>
   <div id="barterBreakdown" class="list"></div>
@@ -564,32 +564,36 @@ function updateProductSummary() {
     productCount++;
   });
   
+  // CRITICAL: Multiply by number of selected stations (selling to each station)
+  const numStations = state.stations.size;
+  const totalMonthlyValueAllStations = totalMonthlyValue * numStations;
+  
   $('productCount').textContent = String(productCount);
-  $('totalValue').textContent = totalMonthlyValue.toLocaleString();
+  $('totalValue').textContent = totalMonthlyValueAllStations.toLocaleString();
   
   // Update displays based on pricing type
   if (pricingType === 'barter') {
-    const annualBarterValue = totalMonthlyValue * 12;
-    calculateBarterMinutes(annualBarterValue, totalMonthlyValue);
+    const annualBarterValue = totalMonthlyValueAllStations * 12;
+    calculateBarterMinutes(annualBarterValue, totalMonthlyValueAllStations);
     $('cashValuesSection').classList.add('hidden');
   } else if (pricingType === 'mixed') {
-    renderCashValues(totalMonthlyValue);
+    renderCashValues(totalMonthlyValueAllStations);
     // Mixed mode barter calculation happens in renderCashValues
   } else {
     // Cash mode - show cash summary
-    showCashSummary(totalMonthlyValue);
+    showCashSummary(totalMonthlyValueAllStations);
     $('cashValuesSection').classList.add('hidden');
   }
 }
 
-function showCashSummary(monthlyValue) {
+function showCashSummary(totalMonthlyValue) {
   const barterSection = $('barterMinutesSection');
   const breakdown = $('barterBreakdown');
   const sectionTitle = $('barterSectionTitle');
   const barterControls = $('barterControls');
   const barterTotals = $('barterTotals');
   
-  if (monthlyValue === 0 || state.stations.size === 0) {
+  if (totalMonthlyValue === 0 || state.stations.size === 0) {
     barterSection.classList.add('hidden');
     return;
   }
@@ -613,47 +617,67 @@ function showCashSummary(monthlyValue) {
     }
   });
   
-  // List stations
+  const perStationMonthly = totalMonthlyValue / selectedStations.length;
+  
+  // List stations with per-station value
   selectedStations.forEach(station => {
     const row = document.createElement('div');
     row.className = 'el';
     row.style.padding = '8px 10px';
+    row.style.justifyContent = 'space-between';
     
     const stationName = document.createElement('div');
     stationName.innerHTML = `<strong>${station.station}</strong> <span class="muted">— ${station.market}</span>`;
     
+    const stationValue = document.createElement('div');
+    stationValue.className = 'badge';
+    stationValue.textContent = `$${Math.round(perStationMonthly).toLocaleString()}/mo`;
+    
     row.appendChild(stationName);
+    row.appendChild(stationValue);
     breakdown.appendChild(row);
   });
   
   // Show Monthly/Annual summary
-  const annualValue = monthlyValue * 12;
+  const annualValue = totalMonthlyValue * 12;
   
   const summaryRow = document.createElement('div');
   summaryRow.style.cssText = 'padding: 12px; font-size: 12px; border-top: 1px solid var(--edge); margin-top: 8px; display: flex; flex-direction: column; gap: 12px; background: rgba(15, 24, 35, 0.5);';
   
-  // Monthly values
+  // Per-station breakdown
+  const perStationRow = document.createElement('div');
+  const perStationTitle = document.createElement('strong');
+  perStationTitle.textContent = 'Per Station:';
+  perStationRow.appendChild(perStationTitle);
+  
+  const perStationDetails = document.createElement('div');
+  perStationDetails.style.cssText = 'margin-left: 16px; color: var(--muted); margin-top: 4px;';
+  perStationDetails.textContent = `$${Math.round(perStationMonthly).toLocaleString()}/mo × ${selectedStations.length} station${selectedStations.length !== 1 ? 's' : ''}`;
+  perStationRow.appendChild(perStationDetails);
+  
+  // Monthly total
   const monthlyRow = document.createElement('div');
   const monthlyTitle = document.createElement('strong');
-  monthlyTitle.textContent = 'Monthly Value:';
+  monthlyTitle.textContent = 'Total Monthly Value:';
   monthlyRow.appendChild(monthlyTitle);
   
   const monthlyDetails = document.createElement('div');
   monthlyDetails.style.cssText = 'margin-left: 16px; color: var(--muted); margin-top: 4px;';
-  monthlyDetails.textContent = `$${Math.round(monthlyValue).toLocaleString()} × ${selectedStations.length} station${selectedStations.length !== 1 ? 's' : ''}`;
+  monthlyDetails.textContent = `$${Math.round(totalMonthlyValue).toLocaleString()}`;
   monthlyRow.appendChild(monthlyDetails);
   
-  // Annual values
+  // Annual total
   const annualRow = document.createElement('div');
   const annualTitle = document.createElement('strong');
-  annualTitle.textContent = 'Annual Value:';
+  annualTitle.textContent = 'Total Annual Value:';
   annualRow.appendChild(annualTitle);
   
   const annualDetails = document.createElement('div');
   annualDetails.style.cssText = 'margin-left: 16px; color: var(--muted); margin-top: 4px;';
-  annualDetails.textContent = `$${Math.round(annualValue).toLocaleString()} ($${monthlyValue.toLocaleString()}/mo × 12)`;
+  annualDetails.textContent = `$${Math.round(annualValue).toLocaleString()} ($${Math.round(totalMonthlyValue).toLocaleString()}/mo × 12)`;
   annualRow.appendChild(annualDetails);
   
+  summaryRow.appendChild(perStationRow);
   summaryRow.appendChild(monthlyRow);
   summaryRow.appendChild(annualRow);
   breakdown.appendChild(summaryRow);
@@ -675,7 +699,7 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   breakdown.innerHTML = '';
   
   // Update title for barter mode
-  if (sectionTitle) sectionTitle.textContent = 'Barter Spots Required (Optimized)';
+  if (sectionTitle) sectionTitle.textContent = 'Barter Spots Required (Distributed)';
   
   // Show barter-specific controls
   if (barterControls) barterControls.classList.remove('hidden');
@@ -723,94 +747,108 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
       });
     });
   } else {
-    // AUTO-CALCULATE: Optimize for least minutes needed
-    // Calculate value per spot for each station
-    const stationEfficiency = [];
+    // AUTO-CALCULATE: Distribute proportionally across ALL stations
+    // Calculate total efficiency across all stations
+    let totalPrimeEfficiency = 0;
+    let totalROSEfficiency = 0;
     
     selectedStations.forEach(station => {
       const primeAQH = station.primeAQH || 0;
       const rosAQH = station.rosAQH || 0;
       
       if (primeAQH > 0) {
-        const primeSpotValue = (primeAQH / 1000) * factor; // Annual value per spot
-        stationEfficiency.push({
-          station,
-          type: 'prime',
-          aqh: primeAQH,
-          valuePerSpot: primeSpotValue,
-          efficiency: primeSpotValue // Higher is better
-        });
+        const primeSpotValue = (primeAQH / 1000) * factor;
+        totalPrimeEfficiency += primeSpotValue;
       }
       
       if (rosAQH > 0) {
-        const rosSpotValue = (rosAQH / 1000) * factor; // Annual value per spot
-        stationEfficiency.push({
-          station,
-          type: 'ros',
-          aqh: rosAQH,
-          valuePerSpot: rosSpotValue,
-          efficiency: rosSpotValue // Higher is better
-        });
+        const rosSpotValue = (rosAQH / 1000) * factor;
+        totalROSEfficiency += rosSpotValue;
       }
     });
     
-    // Sort by efficiency (highest value per spot first)
-    stationEfficiency.sort((a, b) => b.efficiency - a.efficiency);
+    const totalEfficiency = totalPrimeEfficiency + totalROSEfficiency;
     
-    // Allocate whole spots to reach target value (within ±5%)
-    const targetMin = totalBarterValue * 0.95;
-    const targetMax = totalBarterValue * 1.05;
-    
-    let currentValue = 0;
-    const allocation = new Map(); // station.key -> {prime: number, ros: number}
-    
-    for (const entry of stationEfficiency) {
-      const stationKey = entry.station.key;
-      
-      if (!allocation.has(stationKey)) {
-        allocation.set(stationKey, { prime: 0, ros: 0 });
-      }
-      
-      // Try adding spots one at a time until we reach target
-      while (currentValue < targetMin) {
-        if (entry.type === 'prime') {
-          allocation.get(stationKey).prime += 1;
-        } else {
-          allocation.get(stationKey).ros += 1;
-        }
-        currentValue += entry.valuePerSpot;
-        
-        // Stop if we exceed max tolerance
-        if (currentValue > targetMax) {
-          // Remove the last spot we added
-          if (entry.type === 'prime') {
-            allocation.get(stationKey).prime -= 1;
-          } else {
-            allocation.get(stationKey).ros -= 1;
-          }
-          currentValue -= entry.valuePerSpot;
-          break;
-        }
-      }
-      
-      // If we've reached target range, stop allocating
-      if (currentValue >= targetMin && currentValue <= targetMax) {
-        break;
-      }
-    }
-    
-    // Convert allocation to stationSpots format
+    // Allocate proportionally based on efficiency share
     selectedStations.forEach(station => {
-      const spots = allocation.get(station.key) || { prime: 0, ros: 0 };
+      const primeAQH = station.primeAQH || 0;
+      const rosAQH = station.rosAQH || 0;
+      
+      let primeSpots = 0;
+      let rosSpots = 0;
+      
+      // Calculate this station's share of the target value
+      if (primeAQH > 0 && totalPrimeEfficiency > 0) {
+        const primeSpotValue = (primeAQH / 1000) * factor;
+        const primeShare = (primeSpotValue / totalEfficiency) * totalBarterValue;
+        // Calculate spots needed for this share
+        primeSpots = Math.round(primeShare / primeSpotValue);
+        // Ensure at least 1 spot if station has non-zero AQH
+        if (primeSpots === 0 && primeAQH > 0) primeSpots = 1;
+      }
+      
+      if (rosAQH > 0 && totalROSEfficiency > 0) {
+        const rosSpotValue = (rosAQH / 1000) * factor;
+        const rosShare = (rosSpotValue / totalEfficiency) * totalBarterValue;
+        // Calculate spots needed for this share
+        rosSpots = Math.round(rosShare / rosSpotValue);
+        // Ensure at least 1 spot if station has non-zero AQH
+        if (rosSpots === 0 && rosAQH > 0) rosSpots = 1;
+      }
+      
       stationSpots.push({
         station,
-        primeSpots: spots.prime,
-        rosSpots: spots.ros,
-        primeAQH: station.primeAQH || 0,
-        rosAQH: station.rosAQH || 0,
+        primeSpots,
+        rosSpots,
+        primeAQH,
+        rosAQH,
         manual: false
       });
     });
+    
+    // Fine-tune: If we're outside ±5%, adjust the most efficient stations
+    let currentValue = 0;
+    stationSpots.forEach(entry => {
+      if (entry.primeAQH > 0 && entry.primeSpots > 0) {
+        currentValue += (entry.primeAQH / 1000) * factor * entry.primeSpots;
+      }
+      if (entry.rosAQH > 0 && entry.rosSpots > 0) {
+        currentValue += (entry.rosAQH / 1000) * factor * entry.rosSpots;
+      }
+    });
+    
+    const targetMin = totalBarterValue * 0.95;
+    const targetMax = totalBarterValue * 1.05;
+    
+    // If outside tolerance, adjust most efficient station
+    if (currentValue < targetMin || currentValue > targetMax) {
+      // Find most efficient station
+      let mostEfficient = null;
+      let maxEfficiency = 0;
+      
+      stationSpots.forEach(entry => {
+        const primeValue = entry.primeAQH > 0 ? (entry.primeAQH / 1000) * factor : 0;
+        const rosValue = entry.rosAQH > 0 ? (entry.rosAQH / 1000) * factor : 0;
+        const maxValue = Math.max(primeValue, rosValue);
+        
+        if (maxValue > maxEfficiency) {
+          maxEfficiency = maxValue;
+          mostEfficient = { entry, isPrime: primeValue > rosValue, spotValue: maxValue };
+        }
+      });
+      
+      // Adjust spots on most efficient station to hit target
+      if (mostEfficient) {
+        const difference = totalBarterValue - currentValue;
+        const spotsToAdjust = Math.round(difference / mostEfficient.spotValue);
+        
+        if (mostEfficient.isPrime) {
+          mostEfficient.entry.primeSpots = Math.max(1, mostEfficient.entry.primeSpots + spotsToAdjust);
+        } else {
+          mostEfficient.entry.rosSpots = Math.max(1, mostEfficient.entry.rosSpots + spotsToAdjust);
+        }
+      }
+    }
   }
   
   // Calculate totals
@@ -833,10 +871,8 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
     }
   });
   
-  // Render station breakdown
-  stationSpots
-    .filter(entry => entry.primeSpots > 0 || entry.rosSpots > 0)
-    .forEach(entry => {
+  // Render station breakdown - SHOW ALL STATIONS
+  stationSpots.forEach(entry => {
       const station = entry.station;
       const row = document.createElement('div');
       row.className = 'el';
@@ -846,6 +882,18 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
       
       const stationName = document.createElement('div');
       stationName.innerHTML = `<strong>${station.station}</strong> <span class="muted">— ${station.market}</span>`;
+      
+      // Show message if no AQH data
+      if ((entry.primeAQH === 0 && entry.rosAQH === 0) || (entry.primeSpots === 0 && entry.rosSpots === 0)) {
+        const noDataMsg = document.createElement('div');
+        noDataMsg.style.cssText = 'margin-left: 8px; color: var(--muted); font-size: 11px; font-style: italic;';
+        noDataMsg.textContent = '⚠️ No AQH data available for this station';
+        
+        row.appendChild(stationName);
+        row.appendChild(noDataMsg);
+        breakdown.appendChild(row);
+        return;
+      }
       
       // Editable spots inputs (whole numbers only)
       const editRow = document.createElement('div');
@@ -967,7 +1015,7 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   const variance = ((totalActualValue - totalBarterValue) / totalBarterValue) * 100;
   const isWithinTolerance = Math.abs(variance) <= 5;
   
-  const status = hasAnyManualOverrides ? '✏️ Manual' : '✓ Optimized';
+  const status = hasAnyManualOverrides ? '✏️ Manual' : '✓ Distributed';
   const statusColor = isWithinTolerance ? 'var(--muted)' : '#ff6b6b';
   
   // Monthly values
