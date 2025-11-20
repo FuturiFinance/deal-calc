@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Deal Calc — Media Deals (vR2.7)</title>
+  <title>Confidential - Futuri Media Deal Calc (vR2.8)</title>
   <style>
     :root {
       --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
@@ -18,26 +18,34 @@
     .card { background: #0e1621; border:1px solid #223244; border-radius: 14px; padding: 14px; }
     .title { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: #8fa5b9; margin-bottom: 8px; }
     .row { display:flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .btn { background: #0b2034; color: var(--text); border:1px solid #223244; padding:7px 12px; border-radius: 10px; cursor:pointer; }
+    .btn { background: #0b2034; color: var(--text); border:1px solid #223244; padding:7px 12px; border-radius: 10px; cursor:pointer; font-size: 13px; transition: all 0.2s; }
+    .btn:hover:not(:disabled) { background: #0d2a42; border-color: #2a4158; }
     .btn:disabled { opacity: .5; cursor: default; }
-    input[type="text"] { width: 100%; height:40px; background:#0c131b; border:1px solid #223244; color:#e7eef7; border-radius:10px; padding:8px 10px; }
+    input[type="text"] { width: 100%; height:40px; background:#0c131b; border:1px solid #223244; color:#e7eef7; border-radius:10px; padding:8px 10px; font-size: 14px; }
+    input[type="text"]:focus { outline: none; border-color: #2a4a66; }
     .list { display:flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
-    .el { display:flex; align-items:center; gap:8px; justify-content: space-between; padding:6px 10px; border-radius:10px; border:1px solid transparent; }
+    .el { display:flex; align-items:center; gap:8px; justify-content: space-between; padding:6px 10px; border-radius:10px; border:1px solid transparent; transition: all 0.15s; }
     .el:hover { background:#0d1621; border-color:#223244; }
+    label.el { cursor: pointer; }
     .muted { color:#9bb3c7; }
     .badge { background:#0b233a; border:1px solid #223244; border-radius: 6px; padding:2px 6px; font-size:12px; }
-    .placeholder { border: 1px dashed #2a3b4f; border-radius:10px; padding: 10px 12px; color:#8fa5b9; background:#0b121a; }
+    .placeholder { border: 1px dashed #2a3b4f; border-radius:10px; padding: 10px 12px; color:#8fa5b9; background:#0b121a; text-align: center; }
     .hidden { display:none; }
-    input[type="radio"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+    input[type="radio"], input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: var(--accent); }
     input[type="number"] { background:#0c131b; border:1px solid #223244; color:#e7eef7; border-radius:6px; padding:4px 8px; }
+    .back-btn { background: #0f1823; border: 1px solid #223244; color: var(--text); padding: 8px 16px; border-radius: 10px; cursor: pointer; font-size: 14px; transition: all 0.2s; display: inline-flex; align-items: center; gap: 6px; }
+    .back-btn:hover { background: #152533; border-color: #2a4158; }
   </style>
 </head>
 <body>
 <header>
-  <div class="wrap row">
-    <h1>Deal Calc — Media Deals</h1>
-    <span class="pill">Build: vR2-7-distributed-spots-20251120053000Z</span>
-    <span class="pill">Dataset SHA-256: 41ac991fb01a102e…</span>
+  <div class="wrap" style="padding: 12px 16px;">
+    <h1 style="margin-bottom: 4px;">Confidential - Futuri Media Deal Calc</h1>
+    <div class="muted" style="font-size: 11px;">
+      <span style="opacity: 0.7;">v2.7</span>
+      <span style="margin: 0 8px;">•</span>
+      <span style="opacity: 0.7;">20,981 stations • 5,186 parent companies</span>
+    </div>
   </div>
 </header>
 
@@ -70,52 +78,52 @@
   <!-- RADIO VIEW -->
 
   <div id="radioView" class="grid hidden" style="grid-template-columns: 1fr;">
-    <div class="row" style="justify-content:flex-start; margin-bottom:6px;">
-      <button class="btn" id="btnBack">← Back to Landing</button>
+    <div class="row" style="justify-content:flex-start; margin-bottom:12px;">
+      <button class="back-btn" id="btnBack">← Back to Landing</button>
     </div>
 
 ```
 <section class="card">
-  <div class="title">Parent</div>
-  <input id="parentSearch" type="text" placeholder="Search parent…"/>
+  <div class="title">Step 1: Select Parent Company</div>
+  <input id="parentSearch" type="text" placeholder="Search parent companies..."/>
   <div id="parentResults" class="list"></div>
 </section>
 
 
 <section class="card">
-  <div class="title">Markets (multi-select with search)</div>
+  <div class="title">Step 2: Select Markets (Optional)</div>
   <div class="row">
-    <input id="marketSearch" type="text" placeholder="Filter markets…"/>
-    <button class="btn" id="btnSelAllMarkets">Select All (filtered)</button>
-    <button class="btn" id="btnClrAllMarkets">Clear (filtered)</button>
+    <input id="marketSearch" type="text" placeholder="Filter markets..."/>
+    <button class="btn" id="btnSelAllMarkets">Select All</button>
+    <button class="btn" id="btnClrAllMarkets">Clear All</button>
   </div>
-  <div id="marketsPlaceholder" class="placeholder">Pick a parent first…</div>
+  <div id="marketsPlaceholder" class="placeholder">Select a parent company first</div>
   <div id="marketsList" class="list"></div>
 </section>
 
 <section class="card">
-  <div class="title">Stations (multi-select with search)</div>
+  <div class="title">Step 3: Select Stations</div>
   <div class="row">
-    <input id="stationSearch" type="text" placeholder="Filter stations…"/>
-    <button class="btn" id="btnSelAllStations">Select All (filtered)</button>
-    <button class="btn" id="btnClrAllStations">Clear (filtered)</button>
+    <input id="stationSearch" type="text" placeholder="Filter stations..."/>
+    <button class="btn" id="btnSelAllStations">Select All</button>
+    <button class="btn" id="btnClrAllStations">Clear All</button>
   </div>
-  <div id="stationsPlaceholder" class="placeholder">Pick a parent first…</div>
+  <div id="stationsPlaceholder" class="placeholder">Select a parent company first</div>
   <div id="stationsList" class="list"></div>
 </section>
 
 <section class="card">
-  <div class="title">Selected Stations (with AQH)</div>
+  <div class="title">Step 4: Review Selected Stations</div>
   <div id="selectedPreview" class="list"></div>
   <div class="row">
-    <div class="pill">Count: <span id="selCount">0</span></div>
-    <div class="pill">Prime AQH Sum: <span id="primeSum">0</span></div>
-    <div class="pill">ROS AQH Sum: <span id="rosSum">0</span></div>
+    <div class="pill">Stations: <span id="selCount">0</span></div>
+    <div class="pill">Total Prime AQH: <span id="primeSum">0</span></div>
+    <div class="pill">Total ROS AQH: <span id="rosSum">0</span></div>
   </div>
 </section>
 
 <section class="card">
-  <div class="title">Products & Pricing</div>
+  <div class="title">Step 5: Select Products & Pricing</div>
   
   <!-- Pricing Type Selection -->
   <div class="row" style="margin-bottom: 12px;">
@@ -143,7 +151,7 @@
 
   <!-- Products List -->
   <div class="row" style="margin-bottom: 8px;">
-    <input id="productSearch" type="text" placeholder="Search products…"/>
+    <input id="productSearch" type="text" placeholder="Search products..."/>
     <button class="btn" id="btnSelAllProducts">Select All</button>
     <button class="btn" id="btnClrAllProducts">Clear All</button>
     <button class="btn" id="btnResetPricing">Reset to Rate Card</button>
@@ -358,11 +366,25 @@ function renderParents(q='') {
   const list = $('parentResults'); list.innerHTML = '';
   const qn = q.trim().toLowerCase();
   const parents = Array.from(IDX.parentSet).filter(p => p.toLowerCase().includes(qn)).sort();
+  
   parents.slice(0, 300).forEach(p => {
-    const el = document.createElement('div'); el.className = 'el';
-    const btn = document.createElement('button'); btn.className='btn'; btn.textContent = p;
-    btn.onclick = () => setParent(p);
-    el.appendChild(btn); list.appendChild(el);
+    const row = document.createElement('label'); 
+    row.className = 'el';
+    row.style.cursor = 'pointer';
+    
+    const radio = document.createElement('input'); 
+    radio.type = 'radio'; 
+    radio.name = 'parentSelect';
+    radio.value = p;
+    radio.checked = (state.parent === p);
+    radio.onchange = () => setParent(p);
+    
+    const name = document.createElement('span'); 
+    name.textContent = p;
+    
+    row.appendChild(radio); 
+    row.appendChild(name); 
+    list.appendChild(row);
   });
 }
 
