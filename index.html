@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Deal Calc — Media Deals (vR2.4)</title>
+  <title>Deal Calc — Media Deals (vR2.5)</title>
   <style>
     :root {
       --bg: #0b1117; --card:#0f1823; --edge:#223244; --text:#e7eef7; --muted:#9bb3c7; --accent:#1f9aff; --pill:#132437;
@@ -36,7 +36,7 @@
 <header>
   <div class="wrap row">
     <h1>Deal Calc — Media Deals</h1>
-    <span class="pill">Build: vR2-4-annual-display-fix-20251120051200Z</span>
+    <span class="pill">Build: vR2-5-cash-summary-20251120051800Z</span>
     <span class="pill">Dataset SHA-256: 41ac991fb01a102e…</span>
   </div>
 </header>
@@ -159,24 +159,24 @@
 
 <!-- Cash Values by Station (Mixed Mode Only) -->
 <section class="card hidden" id="cashValuesSection">
-  <div class="title">Cash Values by Station</div>
-  <div class="muted" style="margin-bottom: 12px;">Enter cash payment for each station. Barter will automatically cover remaining value.</div>
+  <div class="title">Cash Values by Station (All Selected Stations)</div>
+  <div class="muted" style="margin-bottom: 12px;">Enter monthly cash payment for each station below. Barter will automatically cover remaining value.</div>
   <div id="cashValuesList" class="list"></div>
   <div class="row" style="margin-top: 12px;">
-    <div class="pill">Total Cash: $<span id="totalCashInput">0</span></div>
-    <div class="pill">Remaining for Barter: $<span id="remainingForBarter">0</span></div>
+    <div class="pill">Total Cash (Monthly): $<span id="totalCashInput">0</span></div>
+    <div class="pill">Remaining for Barter (Monthly): $<span id="remainingForBarter">0</span></div>
   </div>
 </section>
 
-<!-- Barter Spots Breakdown -->
+<!-- Barter Spots Breakdown / Cash Summary -->
 <section class="card hidden" id="barterMinutesSection">
-  <div class="title">Barter Spots Required (Optimized)</div>
-  <div class="row" style="margin-bottom: 12px;">
+  <div class="title" id="barterSectionTitle">Barter Spots Required (Optimized)</div>
+  <div class="row" style="margin-bottom: 12px;" id="barterControls">
     <div class="muted">Spots calculated using least minutes needed. Edit manually if needed.</div>
     <button class="btn" id="btnResetMinutes">Reset to Auto</button>
   </div>
   <div id="barterBreakdown" class="list"></div>
-  <div class="row" style="margin-top: 12px;">
+  <div class="row" style="margin-top: 12px;" id="barterTotals">
     <div class="pill">Total Prime: <span id="totalPrimeMinutes">0</span></div>
     <div class="pill">Total ROS: <span id="totalROSMinutes">0</span></div>
   </div>
@@ -567,23 +567,104 @@ function updateProductSummary() {
   $('productCount').textContent = String(productCount);
   $('totalValue').textContent = totalMonthlyValue.toLocaleString();
   
-  // Update barter spots based on pricing type
-  // Convert monthly value to annual for barter calculations (spots generate annual value)
+  // Update displays based on pricing type
   if (pricingType === 'barter') {
     const annualBarterValue = totalMonthlyValue * 12;
     calculateBarterMinutes(annualBarterValue, totalMonthlyValue);
+    $('cashValuesSection').classList.add('hidden');
   } else if (pricingType === 'mixed') {
     renderCashValues(totalMonthlyValue);
+    // Mixed mode barter calculation happens in renderCashValues
   } else {
-    // Cash mode - hide barter sections
-    $('barterMinutesSection').classList.add('hidden');
+    // Cash mode - show cash summary
+    showCashSummary(totalMonthlyValue);
     $('cashValuesSection').classList.add('hidden');
   }
+}
+
+function showCashSummary(monthlyValue) {
+  const barterSection = $('barterMinutesSection');
+  const breakdown = $('barterBreakdown');
+  const sectionTitle = $('barterSectionTitle');
+  const barterControls = $('barterControls');
+  const barterTotals = $('barterTotals');
+  
+  if (monthlyValue === 0 || state.stations.size === 0) {
+    barterSection.classList.add('hidden');
+    return;
+  }
+  
+  barterSection.classList.remove('hidden');
+  breakdown.innerHTML = '';
+  
+  // Update title for cash mode
+  if (sectionTitle) sectionTitle.textContent = 'CASH DEAL SUMMARY';
+  
+  // Hide barter-specific controls
+  if (barterControls) barterControls.classList.add('hidden');
+  if (barterTotals) barterTotals.classList.add('hidden');
+  
+  // Get selected stations
+  const selectedStations = [];
+  (IDX.stationsByParent.get(state.parent) || []).forEach(s => {
+    const key = s.parent + '|' + s.market + '|' + s.station;
+    if (state.stations.has(key)) {
+      selectedStations.push({...s, key});
+    }
+  });
+  
+  // List stations
+  selectedStations.forEach(station => {
+    const row = document.createElement('div');
+    row.className = 'el';
+    row.style.padding = '8px 10px';
+    
+    const stationName = document.createElement('div');
+    stationName.innerHTML = `<strong>${station.station}</strong> <span class="muted">— ${station.market}</span>`;
+    
+    row.appendChild(stationName);
+    breakdown.appendChild(row);
+  });
+  
+  // Show Monthly/Annual summary
+  const annualValue = monthlyValue * 12;
+  
+  const summaryRow = document.createElement('div');
+  summaryRow.style.cssText = 'padding: 12px; font-size: 12px; border-top: 1px solid var(--edge); margin-top: 8px; display: flex; flex-direction: column; gap: 12px; background: rgba(15, 24, 35, 0.5);';
+  
+  // Monthly values
+  const monthlyRow = document.createElement('div');
+  const monthlyTitle = document.createElement('strong');
+  monthlyTitle.textContent = 'Monthly Value:';
+  monthlyRow.appendChild(monthlyTitle);
+  
+  const monthlyDetails = document.createElement('div');
+  monthlyDetails.style.cssText = 'margin-left: 16px; color: var(--muted); margin-top: 4px;';
+  monthlyDetails.textContent = `$${Math.round(monthlyValue).toLocaleString()} × ${selectedStations.length} station${selectedStations.length !== 1 ? 's' : ''}`;
+  monthlyRow.appendChild(monthlyDetails);
+  
+  // Annual values
+  const annualRow = document.createElement('div');
+  const annualTitle = document.createElement('strong');
+  annualTitle.textContent = 'Annual Value:';
+  annualRow.appendChild(annualTitle);
+  
+  const annualDetails = document.createElement('div');
+  annualDetails.style.cssText = 'margin-left: 16px; color: var(--muted); margin-top: 4px;';
+  annualDetails.textContent = `$${Math.round(annualValue).toLocaleString()} ($${monthlyValue.toLocaleString()}/mo × 12)`;
+  annualRow.appendChild(annualDetails);
+  
+  summaryRow.appendChild(monthlyRow);
+  summaryRow.appendChild(annualRow);
+  breakdown.appendChild(summaryRow);
 }
 
 function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   const barterSection = $('barterMinutesSection');
   const breakdown = $('barterBreakdown');
+  const sectionTitle = $('barterSectionTitle');
+  const barterControls = $('barterControls');
+  const barterTotals = $('barterTotals');
   
   if (totalBarterValue === 0 || state.stations.size === 0) {
     barterSection.classList.add('hidden');
@@ -592,6 +673,13 @@ function calculateBarterMinutes(totalBarterValue, monthlyBarterValue) {
   
   barterSection.classList.remove('hidden');
   breakdown.innerHTML = '';
+  
+  // Update title for barter mode
+  if (sectionTitle) sectionTitle.textContent = 'Barter Spots Required (Optimized)';
+  
+  // Show barter-specific controls
+  if (barterControls) barterControls.classList.remove('hidden');
+  if (barterTotals) barterTotals.classList.remove('hidden');
   
   // Get selected stations with their AQH
   const selectedStations = [];
